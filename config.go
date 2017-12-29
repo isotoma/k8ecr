@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// ConfigCommand takes no switches
 type ConfigCommand struct {
 }
 
@@ -54,6 +56,9 @@ func setProfile(context string, profile string) {
 // Execute Config command
 func (x *ConfigCommand) Execute(args []string) error {
 	context := getContext()
+	if context == "" {
+		return errors.New("Unable to read kubectl context")
+	}
 	if len(args) == 0 {
 		fmt.Println(getProfile())
 	} else {
