@@ -9,11 +9,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type Link struct {
-	Profile string
-	Context string
-}
-
 type ConfigCommand struct {
 }
 
@@ -21,13 +16,13 @@ var configCommand ConfigCommand
 
 func setContext(profile string, context string) {
 	fmt.Printf("Setting profile to %s for context %s\n", profile, context)
-	var l []Link
+	var l = make(map[string]string)
 	doc, err := ioutil.ReadFile("k8ecr.yaml")
 	if err == nil {
 		yaml.Unmarshal(doc, &l)
 	}
-	k := append(l, Link{profile, context})
-	d, err := yaml.Marshal(&k)
+	l[context] = profile
+	d, err := yaml.Marshal(&l)
 	if err == nil {
 		ioutil.WriteFile("k8ecr.yaml", d, 0644)
 	} else {
