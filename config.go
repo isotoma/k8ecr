@@ -14,13 +14,34 @@ type ConfigCommand struct {
 
 var configCommand ConfigCommand
 
-func setContext(profile string, context string) {
-	fmt.Printf("Setting profile to %s for context %s\n", profile, context)
+func getContext() string {
+	cmd := exec.Command("kubectl", "config", "current-context")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	context := strings.TrimSpace(string(output))
+	return context
+}
+
+func getProfile() string {
+	context := getContext()
+	config := readConfig()
+	return config[context]
+}
+
+func readConfig() map[string]string {
 	var l = make(map[string]string)
 	doc, err := ioutil.ReadFile("k8ecr.yaml")
 	if err == nil {
 		yaml.Unmarshal(doc, &l)
 	}
+	return l
+}
+
+func setProfile(context string, profile string) {
+	fmt.Printf("Setting profile to %s for context %s\n", profile, context)
+	l := readConfig()
 	l[context] = profile
 	d, err := yaml.Marshal(&l)
 	if err == nil {
@@ -30,14 +51,14 @@ func setContext(profile string, context string) {
 	}
 }
 
+// Execute Config command
 func (x *ConfigCommand) Execute(args []string) error {
-	cmd := exec.Command("kubectl", "config", "current-context")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return err
+	context := getContext()
+	if len(args) == 0 {
+		fmt.Println(getProfile())
+	} else {
+		setProfile(context, args[0])
 	}
-	context := strings.TrimSpace(string(output))
-	setContext(args[0], context)
 	return nil
 }
 
