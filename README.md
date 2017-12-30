@@ -2,6 +2,15 @@
 
 Utility for managing ecr repositories with kubernetes
 
+## Building
+
+If you don't already have `dep` installed go get it from the releases page:
+
+    https://github.com/golang/dep/releases
+
+And put it in your path.
+
+
 ## Concepts
 
 k8ecr provides tooling to make it easier to use docker images from ECR repositories in your Kubernetes clusters created by kops. In particular it understands the link between an AWS account and role (i.e. an AWS profile) and a Kubernetes context.

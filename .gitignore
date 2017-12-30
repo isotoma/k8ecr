@@ -1,4 +1,5 @@
 k8ecr
+vendor
 
 # Binaries for programs and plugins
 *.exe
