@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"os/exec"
-	"strings"
 
 	"gopkg.in/yaml.v2"
 )
@@ -15,22 +13,6 @@ type ConfigCommand struct {
 }
 
 var configCommand ConfigCommand
-
-func getContext() string {
-	cmd := exec.Command("kubectl", "config", "current-context")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return ""
-	}
-	context := strings.TrimSpace(string(output))
-	return context
-}
-
-func getProfile() string {
-	context := getContext()
-	config := readConfig()
-	return config[context]
-}
 
 func readConfig() map[string]string {
 	var l = make(map[string]string)
@@ -68,5 +50,8 @@ func (x *ConfigCommand) Execute(args []string) error {
 }
 
 func init() {
-	parser.AddCommand("config", "Configure", "Link an AWS profile to a kubectl context", &configCommand)
+	parser.AddCommand("config",
+		"Configure",
+		"Link an AWS profile to a kubectl context",
+		&configCommand)
 }
