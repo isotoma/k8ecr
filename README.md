@@ -10,6 +10,11 @@ If you don't already have `dep` installed go get it from the releases page:
 
 And put it in your path.
 
+Then:
+
+    dep ensure
+
+To install the dependencies into the vendor/ folder.
 
 ## Concepts
 
