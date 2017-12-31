@@ -37,7 +37,7 @@ func getCredentials() (types.AuthConfig, error) {
 	return types.AuthConfig{
 		Username:      username,
 		Password:      password,
-		ServerAddress: endpoint,
+		ServerAddress: endpoint[8:], // strip the https://
 	}, nil
 }
 
@@ -50,16 +50,23 @@ func login() (*docker.Client, types.AuthConfig, error) {
 	if err != nil {
 		return cli, creds, err
 	}
-	_, err = cli.RegistryLogin(context.Background(), creds)
+	fmt.Println("Logging into", creds.ServerAddress)
+	response, err := cli.RegistryLogin(context.Background(), creds)
 	if err != nil {
 		return nil, creds, err
 	}
+	fmt.Println(response)
 	return cli, creds, nil
 }
 
 func registryAuth(creds types.AuthConfig) string {
-	b := fmt.Sprintf("%s:%s", creds.Username, creds.Password)
-	return base64.StdEncoding.EncodeToString([]byte(b))
+	// conveniently types.AuthConfig has terms that we need for the
+	// authorisation header
+	b, err := json.Marshal(&creds)
+	if err != nil {
+		panic(err)
+	}
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 func tag(client *docker.Client, endpoint string, repo string, version string) error {
@@ -68,12 +75,27 @@ func tag(client *docker.Client, endpoint string, repo string, version string) er
 	return client.ImageTag(context.Background(), source, target)
 }
 
+func updateLine(lineno int, message string) {
+	fmt.Printf("%s", "\u001b[1000D") // Move left
+	fmt.Printf("\u001b[%dA", lineno) // Move up
+	fmt.Printf("%s", message)
+	fmt.Printf("\u001b[%dB", lineno) // Move down
+}
+
+type ProgressLine struct {
+	ID             string
+	Status         string
+	Progress       string
+	ProgressDetail map[string]string
+	Error          string
+}
+
 func push(client *docker.Client, creds types.AuthConfig, repo string, version string) error {
-	err := tag(client, creds.ServerAddress[8:], repo, version)
+	err := tag(client, creds.ServerAddress, repo, version)
 	if err != nil {
 		return err
 	}
-	image := fmt.Sprintf("%s/%s", creds.ServerAddress[8:], repo)
+	image := fmt.Sprintf("%s/%s", creds.ServerAddress, repo)
 	stream, err := client.ImagePush(context.Background(),
 		image,
 		types.ImagePushOptions{
@@ -83,19 +105,36 @@ func push(client *docker.Client, creds types.AuthConfig, repo string, version st
 		return err
 	}
 	buffered := bufio.NewReader(stream)
+	bars := make(map[string]int)
+	lines := 0
 	for {
 		b, err := buffered.ReadBytes('\n')
 		if err != nil {
 			stream.Close()
 			return err
 		}
-		data := make(map[string]interface{})
+		data := ProgressLine{}
 		jsonErr := json.Unmarshal(b, &data)
 		if jsonErr != nil {
 			stream.Close()
 			return jsonErr
 		}
-		fmt.Println(data)
+		if data.Error != "" {
+			return errors.New(data.Error)
+		}
+		if data.ID != "" {
+			if _, ok := bars[data.ID]; !ok {
+				bars[data.ID] = lines
+				lines++
+				fmt.Println(data.ID)
+			} else {
+				progress := data.Progress
+				if progress == "" {
+					progress = data.Status
+				}
+				updateLine(lines-bars[data.ID], fmt.Sprintf("%s: %s", data.ID, progress))
+			}
+		}
 		if err == io.EOF {
 			fmt.Println("\nDone")
 			stream.Close()
