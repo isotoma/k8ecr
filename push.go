@@ -90,10 +90,10 @@ type ProgressLine struct {
 	Error          string
 }
 
-func push(client *docker.Client, creds types.AuthConfig, repo string, version string) error {
+func startPush(client *docker.Client, creds types.AuthConfig, repo string, version string) (io.ReadCloser, error) {
 	err := tag(client, creds.ServerAddress, repo, version)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	image := fmt.Sprintf("%s/%s", creds.ServerAddress, repo)
 	stream, err := client.ImagePush(context.Background(),
@@ -102,25 +102,49 @@ func push(client *docker.Client, creds types.AuthConfig, repo string, version st
 			RegistryAuth: registryAuth(creds),
 		})
 	if err != nil {
+		return nil, err
+	}
+	return stream, nil
+
+}
+
+func getNextLine(stream *bufio.Reader) (*ProgressLine, error) {
+	b, err := stream.ReadBytes('\n')
+	if err != nil {
+		return nil, err
+	}
+	data := ProgressLine{}
+	jsonErr := json.Unmarshal(b, &data)
+	if jsonErr != nil {
+		return nil, jsonErr
+	}
+	if data.Error != "" {
+		return nil, errors.New(data.Error)
+	}
+	return &data, nil
+}
+
+func formatProgress(data *ProgressLine) string {
+	progress := data.Progress
+	if progress == "" {
+		progress = data.Status
+	}
+	return fmt.Sprintf("%s: %s", data.ID, progress)
+}
+
+func push(client *docker.Client, creds types.AuthConfig, repo string, version string) error {
+	rawStream, err := startPush(client, creds, repo, version)
+	if err != nil {
 		return err
 	}
-	buffered := bufio.NewReader(stream)
+	stream := bufio.NewReader(rawStream)
 	bars := make(map[string]int)
 	lines := 0
 	for {
-		b, err := buffered.ReadBytes('\n')
+		data, err := getNextLine(stream)
 		if err != nil {
-			stream.Close()
+			rawStream.Close()
 			return err
-		}
-		data := ProgressLine{}
-		jsonErr := json.Unmarshal(b, &data)
-		if jsonErr != nil {
-			stream.Close()
-			return jsonErr
-		}
-		if data.Error != "" {
-			return errors.New(data.Error)
 		}
 		if data.ID != "" {
 			if _, ok := bars[data.ID]; !ok {
@@ -128,16 +152,12 @@ func push(client *docker.Client, creds types.AuthConfig, repo string, version st
 				lines++
 				fmt.Println(data.ID)
 			} else {
-				progress := data.Progress
-				if progress == "" {
-					progress = data.Status
-				}
-				updateLine(lines-bars[data.ID], fmt.Sprintf("%s: %s", data.ID, progress))
+				updateLine(lines-bars[data.ID], formatProgress(data))
 			}
 		}
 		if err == io.EOF {
-			fmt.Println("\nDone")
-			stream.Close()
+			fmt.Println("\n\nDone")
+			rawStream.Close()
 			return nil
 		}
 	}
