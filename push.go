@@ -132,29 +132,40 @@ func formatProgress(data *ProgressLine) string {
 	return fmt.Sprintf("%s: %s", data.ID, progress)
 }
 
+type ProgressDisplay struct {
+	Bars  map[string]int
+	Lines int
+}
+
+func (p ProgressDisplay) Update(data *ProgressLine) {
+	if data.ID != "" {
+		if _, ok := p.Bars[data.ID]; !ok {
+			p.Bars[data.ID] = p.Lines
+			p.Lines++
+			fmt.Println(data.ID)
+		} else {
+			updateLine(p.Lines-p.Bars[data.ID], formatProgress(data))
+		}
+	}
+}
+
 func push(client *docker.Client, creds types.AuthConfig, repo string, version string) error {
 	rawStream, err := startPush(client, creds, repo, version)
 	if err != nil {
 		return err
 	}
 	stream := bufio.NewReader(rawStream)
-	bars := make(map[string]int)
-	lines := 0
+	display := ProgressDisplay{
+		Bars:  make(map[string]int),
+		Lines: 0,
+	}
 	for {
 		data, err := getNextLine(stream)
-		if err != nil {
+		if err != io.EOF && err != nil {
 			rawStream.Close()
 			return err
 		}
-		if data.ID != "" {
-			if _, ok := bars[data.ID]; !ok {
-				bars[data.ID] = lines
-				lines++
-				fmt.Println(data.ID)
-			} else {
-				updateLine(lines-bars[data.ID], formatProgress(data))
-			}
-		}
+		display.Update(data)
 		if err == io.EOF {
 			fmt.Println("\n\nDone")
 			rawStream.Close()

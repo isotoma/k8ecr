@@ -36,3 +36,7 @@
 [[constraint]]
   name = "docker.io/go-docker"
   version = "1.0.0"
+
+[[constraint]]
+  name = "k8s.io/client-go"
+  version = "6.0.0"
