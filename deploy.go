@@ -100,28 +100,26 @@ func getDeployments(namespace string) (*v1beta1.DeploymentList, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Listing deployments for namespace", namespace)
 	deployments, err := clientset.AppsV1beta1().Deployments(namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("%+v\n", deployments)
 	return deployments, nil
 }
 
 type Image struct {
 	Original string
-	Image    string
 	Repo     string
+	Registry string
 	Version  string
 }
 
-func (i Image) New(url string) {
+func (i *Image) Make(url string) {
 	i.Original = url
 	p1 := strings.Split(url, "/")
-	i.Repo = p1[0]
+	i.Registry = p1[0]
 	p2 := strings.Split(p1[1], ":")
-	i.Image = p2[0]
+	i.Repo = p2[0]
 	if len(p2) == 2 {
 		i.Version = p2[1]
 	} else {
@@ -134,10 +132,11 @@ func getDeploymentContainerVersions(deployments *v1beta1.DeploymentList) map[str
 	for _, d := range deployments.Items {
 		if d.Name != "" {
 			deploymentName := d.Name
+			images[deploymentName] = make(map[string][]Image)
 			for _, c := range d.Spec.Template.Spec.Containers {
 				containerName := c.Name
 				image := Image{}
-				image.New(c.Image)
+				image.Make(c.Image)
 				images[deploymentName][containerName] =
 					append(images[deploymentName][containerName], image)
 			}
