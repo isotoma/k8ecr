@@ -20,17 +20,24 @@ type DeployCommand struct{}
 
 var deployCommand DeployCommand
 
-func latestVersion(versions []string) (string, error) {
-	vs := make([]*semver.Version, len(versions))
-	for i, r := range versions {
-		v, err := semver.NewVersion(r)
-		if err != nil {
-			return "", err
-		}
-		vs[i] = v
+// Sorts by semantic version, if there are any, otherwise resorts to a string sort
+func latestVersion(versions []string) string {
+	if len(versions) == 0 {
+		return ""
 	}
-	sort.Sort(semver.Collection(vs))
-	return vs[len(vs)-1].Original(), nil
+	vs := make([]*semver.Version, 0)
+	for _, r := range versions {
+		v, err := semver.NewVersion(r)
+		if err == nil {
+			vs = append(vs, v)
+		}
+	}
+	if len(vs) > 0 {
+		sort.Sort(semver.Collection(vs))
+		return vs[len(vs)-1].Original()
+	}
+	sort.Strings(versions)
+	return versions[len(versions)-1]
 }
 
 func homeDir() string {
@@ -70,20 +77,21 @@ func getTagsForRepository(svc *ecr.ECR, repository string) ([]string, error) {
 	return tagList, nil
 }
 
-func getLatestImages() (map[string][]string, error) {
+func getLatestImage() (map[string]string, error) {
 	svc := ecr.New(createSession())
 	repositories, err := getAllRepositories(svc)
 	if err != nil {
 		return nil, err
 	}
-	imageList := make(map[string][]string)
+	l := make(map[string]string)
 	for _, r := range repositories {
-		imageList[r], err = getTagsForRepository(svc, r)
+		all, err := getTagsForRepository(svc, r)
 		if err != nil {
 			return nil, err
 		}
+		l[r] = latestVersion(all)
 	}
-	return imageList, nil
+	return l, nil
 }
 
 func getDeployments(namespace string) (*v1beta1.DeploymentList, error) {
@@ -146,14 +154,19 @@ func getDeploymentContainerVersions(deployments *v1beta1.DeploymentList) map[str
 }
 
 func (x *DeployCommand) Execute(args []string) error {
-	namespace := args[0]
-	deployments, err := getDeployments(namespace)
+	//namespace := args[0]
+	//deployments, err := getDeployments(namespace)
+	//if err != nil {
+	//	return err
+	//}
+	//fmt.Println("Getting container versions")
+	//current := getDeploymentContainerVersions(deployments)
+	//fmt.Printf("%+v\n", current)
+	images, err := getLatestImage()
 	if err != nil {
 		return err
 	}
-	fmt.Println("Getting container versions")
-	current := getDeploymentContainerVersions(deployments)
-	fmt.Printf("%+v\n", current)
+	fmt.Printf("%+v\n", images)
 	return nil
 }
 
