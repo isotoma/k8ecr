@@ -67,11 +67,8 @@ Will push 1.0.0 and latest tags.
 
 ## Deploying
 
-    k8ecr deploy [REPOSITORY] [VERSION]
+    k8ecr deploy [NAMESPACE]
 
 This will compare all deployments and the must recent version numbers available and present options for deploying images.
 
-If a repository is specified then only those deployments from the specified repository will be shown.
-
-If a version number is specified then all deployments with images from the specified repository will be updated to the specified version.
-
+All possible upgrade options for the specified namespace are shown.
