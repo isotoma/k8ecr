@@ -22,6 +22,8 @@ func readConfig() map[string]string {
 	doc, err := ioutil.ReadFile(config)
 	if err == nil {
 		yaml.Unmarshal(doc, &l)
+	} else {
+		fmt.Println("No configuration found, using default AWS profile. use k8ecr config to set a profile if needed.")
 	}
 	return l
 }

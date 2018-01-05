@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -242,6 +243,9 @@ func getChosen(choices OptionList) OptionList {
 // Execute the deploy command
 func (x *DeployCommand) Execute(args []string) error {
 	processOptions()
+	if len(args) != 1 {
+		return errors.New("Usage: k8ecr deploy NAMESPACE")
+	}
 	namespace := args[0]
 	client, err := getDeploymentsClient(namespace)
 	if err != nil {

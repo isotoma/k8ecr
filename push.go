@@ -172,7 +172,7 @@ func push(client *docker.Client, creds types.AuthConfig, repo string, version st
 		}
 		if data != nil {
 			if data.Error != "" {
-				fmt.Println("\n", data.Error)
+				fmt.Println("\n\n", data.Error)
 				return errors.New(data.Error)
 			}
 			display.Update(data)
