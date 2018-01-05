@@ -71,7 +71,8 @@ func registryAuth(creds types.AuthConfig) string {
 
 func tag(client *docker.Client, endpoint string, repo string, version string) error {
 	source := fmt.Sprintf("%s:%s", repo, version)
-	target := fmt.Sprintf("%s:%s", endpoint, version)
+	target := fmt.Sprintf("%s/%s:%s", endpoint, repo, version)
+	fmt.Println("Tagging", source, target)
 	return client.ImageTag(context.Background(), source, target)
 }
 
@@ -86,7 +87,7 @@ type ProgressLine struct {
 	ID             string
 	Status         string
 	Progress       string
-	ProgressDetail map[string]string
+	ProgressDetail map[string]int
 	Error          string
 }
 
@@ -165,7 +166,9 @@ func push(client *docker.Client, creds types.AuthConfig, repo string, version st
 			rawStream.Close()
 			return err
 		}
-		display.Update(data)
+		if data != nil {
+			display.Update(data)
+		}
 		if err == io.EOF {
 			fmt.Println("\n\nDone")
 			rawStream.Close()

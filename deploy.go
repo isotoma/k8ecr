@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/service/ecr"
@@ -13,9 +15,11 @@ import (
 	"k8s.io/api/apps/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	typed "k8s.io/client-go/kubernetes/typed/apps/v1beta1"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// DeployCommand has no options
 type DeployCommand struct{}
 
 var deployCommand DeployCommand
@@ -94,7 +98,7 @@ func getLatestImage() (map[string]string, error) {
 	return l, nil
 }
 
-func getDeployments(namespace string) (*v1beta1.DeploymentList, error) {
+func getDeploymentsClient(namespace string) (typed.DeploymentInterface, error) {
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig == "" {
 		home := homeDir()
@@ -108,13 +112,10 @@ func getDeployments(namespace string) (*v1beta1.DeploymentList, error) {
 	if err != nil {
 		return nil, err
 	}
-	deployments, err := clientset.AppsV1beta1().Deployments(namespace).List(metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	return deployments, nil
+	return clientset.AppsV1beta1().Deployments(namespace), nil
 }
 
+// Image represents an image currently deployed to a container
 type Image struct {
 	Original string
 	Repo     string
@@ -122,51 +123,139 @@ type Image struct {
 	Version  string
 }
 
-func (i *Image) Make(url string) {
-	i.Original = url
+func newImage(url string) Image {
 	p1 := strings.Split(url, "/")
-	i.Registry = p1[0]
 	p2 := strings.Split(p1[1], ":")
-	i.Repo = p2[0]
+	version := "latest"
 	if len(p2) == 2 {
-		i.Version = p2[1]
-	} else {
-		i.Version = "latest"
+		version = p2[1]
+	}
+	return Image{
+		Original: url,
+		Registry: p1[0],
+		Repo:     p2[0],
+		Version:  version,
 	}
 }
 
-func getDeploymentContainerVersions(deployments *v1beta1.DeploymentList) map[string]map[string][]Image {
-	images := make(map[string]map[string][]Image)
+// Option is an option for upgrade
+type Option struct {
+	Deployment string
+	Container  string
+	Current    Image
+	Latest     string
+}
+
+// OptionList is a list of Options
+type OptionList []Option
+
+func getDeploymentContainerVersions(deployments *v1beta1.DeploymentList) OptionList {
+	images := make(OptionList, 0)
 	for _, d := range deployments.Items {
 		if d.Name != "" {
 			deploymentName := d.Name
-			images[deploymentName] = make(map[string][]Image)
 			for _, c := range d.Spec.Template.Spec.Containers {
 				containerName := c.Name
-				image := Image{}
-				image.Make(c.Image)
-				images[deploymentName][containerName] =
-					append(images[deploymentName][containerName], image)
+				images = append(images, Option{
+					Deployment: deploymentName,
+					Container:  containerName,
+					Current:    newImage(c.Image),
+				})
 			}
 		}
 	}
 	return images
 }
 
-func (x *DeployCommand) Execute(args []string) error {
-	//namespace := args[0]
-	//deployments, err := getDeployments(namespace)
-	//if err != nil {
-	//	return err
-	//}
-	//fmt.Println("Getting container versions")
-	//current := getDeploymentContainerVersions(deployments)
-	//fmt.Printf("%+v\n", current)
+func getUpgradeOptions(current *OptionList, images map[string]string) OptionList {
+	choices := make(OptionList, 0)
+	for _, o := range *current {
+		latest := images[o.Current.Repo]
+		o.Latest = latest
+		if latest != "" && latest != o.Current.Version {
+			choices = append(choices, o)
+		}
+	}
+	return choices
+}
+
+func getUpgradeChoices(client typed.DeploymentInterface) (OptionList, error) {
+	deployments, err := client.List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	current := getDeploymentContainerVersions(deployments)
 	images, err := getLatestImage()
+	if err != nil {
+		return nil, err
+	}
+	choices := getUpgradeOptions(&current, images)
+	return choices, nil
+}
+
+func displayChoices(choices OptionList) {
+	for i, c := range choices {
+		fmt.Printf("%d> %s/%s %s -> %s \n", i, c.Deployment, c.Container, c.Current.Version, c.Latest)
+	}
+}
+
+func updateDeployment(client typed.DeploymentInterface, choice Option) {
+	fmt.Printf("Updating %s/%s to %s\n", choice.Deployment, choice.Container, choice.Latest)
+	deployment, err := client.Get(choice.Deployment, metav1.GetOptions{})
+	if err != nil {
+		panic(err)
+	}
+	//fmt.Println(deployment.Spec.Template.Spec.Containers[0].Image)
+	newImage := fmt.Sprintf("%s/%s:%s", choice.Current.Registry, choice.Current.Repo, choice.Latest)
+	deployment.Spec.Template.Spec.Containers[0].Image = newImage
+	_, err = client.Update(deployment)
+	if err != nil {
+		panic(err)
+	}
+	//fmt.Println(newImage)
+
+}
+
+func getChosen(choices OptionList) OptionList {
+	fmt.Print("> ")
+	reader := bufio.NewReader(os.Stdin)
+	text, err := reader.ReadString('\n')
+	if err != nil {
+		panic(err)
+	}
+	rv := make(OptionList, 0)
+	chosen := strings.Split(text, ",")
+	for _, c := range chosen {
+		i, err := strconv.ParseInt(c, 0, 64)
+		if err != nil {
+			// repeat
+		}
+		rv = append(rv, choices[i])
+	}
+	return rv
+}
+
+// Execute the deploy command
+func (x *DeployCommand) Execute(args []string) error {
+	processOptions()
+	namespace := args[0]
+	client, err := getDeploymentsClient(namespace)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%+v\n", images)
+	choices, err := getUpgradeChoices(client)
+	if err != nil {
+		return err
+	}
+	if len(choices) == 0 {
+		fmt.Println("No containers require upgrade")
+	} else {
+		displayChoices(choices)
+		chosen := getChosen(choices)
+		for _, c := range chosen {
+			updateDeployment(client, c)
+		}
+	}
 	return nil
 }
 
