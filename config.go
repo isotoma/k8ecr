@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 )
@@ -16,7 +17,9 @@ var configCommand ConfigCommand
 
 func readConfig() map[string]string {
 	var l = make(map[string]string)
-	doc, err := ioutil.ReadFile("k8ecr.yaml")
+	home := homeDir()
+	config := filepath.Join(home, ".k8ecr.yaml")
+	doc, err := ioutil.ReadFile(config)
 	if err == nil {
 		yaml.Unmarshal(doc, &l)
 	}
@@ -29,7 +32,9 @@ func setProfile(context string, profile string) {
 	l[context] = profile
 	d, err := yaml.Marshal(&l)
 	if err == nil {
-		ioutil.WriteFile("k8ecr.yaml", d, 0644)
+		home := homeDir()
+		config := filepath.Join(home, ".k8ecr.yaml")
+		ioutil.WriteFile(config, d, 0644)
 	} else {
 		fmt.Println(err.Error())
 	}

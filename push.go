@@ -76,27 +76,13 @@ func tag(client *docker.Client, endpoint string, repo string, version string) er
 	return client.ImageTag(context.Background(), source, target)
 }
 
-func updateLine(lineno int, message string) {
-	fmt.Printf("%s", "\u001b[1000D") // Move left
-	fmt.Printf("\u001b[%dA", lineno) // Move up
-	fmt.Printf("%s", message)
-	fmt.Printf("\u001b[%dB", lineno) // Move down
-}
-
-type ProgressLine struct {
-	ID             string
-	Status         string
-	Progress       string
-	ProgressDetail map[string]int
-	Error          string
-}
-
 func startPush(client *docker.Client, creds types.AuthConfig, repo string, version string) (io.ReadCloser, error) {
 	err := tag(client, creds.ServerAddress, repo, version)
 	if err != nil {
 		return nil, err
 	}
-	image := fmt.Sprintf("%s/%s", creds.ServerAddress, repo)
+	image := fmt.Sprintf("%s/%s:%s", creds.ServerAddress, repo, version)
+	fmt.Println("\n\nPushing ", image)
 	stream, err := client.ImagePush(context.Background(),
 		image,
 		types.ImagePushOptions{
@@ -133,19 +119,37 @@ func formatProgress(data *ProgressLine) string {
 	return fmt.Sprintf("%s: %s", data.ID, progress)
 }
 
+type ProgressLine struct {
+	ID             string
+	Status         string
+	Progress       string
+	ProgressDetail map[string]int
+	Error          string
+}
+
 type ProgressDisplay struct {
 	Bars  map[string]int
 	Lines int
 }
 
-func (p ProgressDisplay) Update(data *ProgressLine) {
+func updateLine(lineno int, message string) {
+	escape := "\x1b"
+	fmt.Printf("%s[1000D", escape)       // Move left
+	fmt.Printf("%s[%dA", escape, lineno) // Move up
+	fmt.Printf("%s", message)
+	fmt.Printf("%s[%dB", escape, lineno) // Move down
+}
+
+// Update the progress and print the output
+func (p *ProgressDisplay) Update(data *ProgressLine) {
 	if data.ID != "" {
-		if _, ok := p.Bars[data.ID]; !ok {
+		line, ok := p.Bars[data.ID]
+		if ok {
+			updateLine(p.Lines-line, formatProgress(data))
+		} else {
 			p.Bars[data.ID] = p.Lines
 			p.Lines++
 			fmt.Println(data.ID)
-		} else {
-			updateLine(p.Lines-p.Bars[data.ID], formatProgress(data))
 		}
 	}
 }
@@ -167,6 +171,10 @@ func push(client *docker.Client, creds types.AuthConfig, repo string, version st
 			return err
 		}
 		if data != nil {
+			if data.Error != "" {
+				fmt.Println("\n", data.Error)
+				return errors.New(data.Error)
+			}
 			display.Update(data)
 		}
 		if err == io.EOF {
