@@ -205,15 +205,19 @@ func updateDeployment(client typed.DeploymentInterface, choice Option) {
 	if err != nil {
 		panic(err)
 	}
-	//fmt.Println(deployment.Spec.Template.Spec.Containers[0].Image)
-	newImage := fmt.Sprintf("%s/%s:%s", choice.Current.Registry, choice.Current.Repo, choice.Latest)
-	deployment.Spec.Template.Spec.Containers[0].Image = newImage
-	_, err = client.Update(deployment)
-	if err != nil {
-		panic(err)
-	}
-	//fmt.Println(newImage)
+	for i, container := range deployment.Spec.Template.Spec.Containers {
+		if container.Name == choice.Container {
+			Verbose.Printf("%s/%s Image was %s\n", choice.Deployment, choice.Container, deployment.Spec.Template.Spec.Containers[0].Image)
+			newImage := fmt.Sprintf("%s/%s:%s", choice.Current.Registry, choice.Current.Repo, choice.Latest)
+			Verbose.Printf("%s/%s new Image %s\n", choice.Deployment, choice.Container, newImage)
+			deployment.Spec.Template.Spec.Containers[i].Image = newImage
+			_, err = client.Update(deployment)
+			if err != nil {
+				panic(err)
+			}
 
+		}
+	}
 }
 
 func getChosen(choices OptionList) OptionList {
