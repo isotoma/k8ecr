@@ -175,6 +175,8 @@ func getUpgradeOptions(current *OptionList, images map[string]string) OptionList
 		o.Latest = latest
 		if latest != "" && latest != o.Current.Version {
 			choices = append(choices, o)
+		} else {
+			Verbose.Printf("Ignoring %s/%s %s === %s\n", o.Deployment, o.Container, o.Current.Version, latest)
 		}
 	}
 	return choices
@@ -231,9 +233,9 @@ func getChosen(choices OptionList) OptionList {
 	rv := make(OptionList, 0)
 	chosen := strings.Split(text, ",")
 	for _, c := range chosen {
-		i, err := strconv.ParseInt(c, 0, 64)
+		i, err := strconv.ParseInt(strings.TrimSpace(c), 0, 64)
 		if err != nil {
-			// repeat
+			panic(err)
 		}
 		rv = append(rv, choices[i])
 	}
