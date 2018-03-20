@@ -1,0 +1,21 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: autodeploy-stage
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: autodeploy-stage
+    spec:
+      containers:
+      - name: app
+        image: dougwinter/k8ecr-autodeploy
+        env:
+        - name: NAMESPACE
+          value: stage 
+        resources:
+          requests:
+            memory: "50Mi"
+            cpu: "50m"
