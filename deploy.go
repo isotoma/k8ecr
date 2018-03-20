@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	typed "k8s.io/client-go/kubernetes/typed/apps/v1beta1"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -99,13 +100,33 @@ func getLatestImage() (map[string]string, error) {
 	return l, nil
 }
 
+func getClusterConfig(kubeconfig string) (*rest.Config, error) {
+	if kubeconfig == "" {
+		// We are running in-cluster
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			return nil, err
+		}
+		return config, nil
+	} else {
+		config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return nil, err
+		}
+		return config, nil
+	}
+}
+
 func getDeploymentsClient(namespace string) (typed.DeploymentInterface, error) {
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig == "" {
 		home := homeDir()
-		kubeconfig = filepath.Join(home, ".kube", "config")
+		defpath := filepath.Join(home, ".kube", "config")
+		if _, err := os.Stat(defpath); err == nil {
+			kubeconfig = defpath
+		}
 	}
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	config, err := getClusterConfig(kubeconfig)
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +135,7 @@ func getDeploymentsClient(namespace string) (typed.DeploymentInterface, error) {
 		return nil, err
 	}
 	return clientset.AppsV1beta1().Deployments(namespace), nil
+
 }
 
 // Image represents an image currently deployed to a container
@@ -245,10 +267,14 @@ func getChosen(choices OptionList) OptionList {
 // Execute the deploy command
 func (x *DeployCommand) Execute(args []string) error {
 	processOptions()
-	if len(args) != 1 {
-		return errors.New("Usage: k8ecr deploy NAMESPACE")
+	if len(args) != 1 && len(args) != 2 {
+		return errors.New("Usage: k8ecr deploy NAMESPACE [IMAGE]")
 	}
 	namespace := args[0]
+	image := ""
+	if len(args) == 2 {
+		image = args[1]
+	}
 	client, err := getDeploymentsClient(namespace)
 	if err != nil {
 		return err
@@ -257,13 +283,27 @@ func (x *DeployCommand) Execute(args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(choices) == 0 {
-		fmt.Println("No containers require upgrade")
+	if image != "" {
+		for _, choice := range choices {
+			if image == "-" {
+				fmt.Println("Autodeploying to", choice.Deployment)
+				updateDeployment(client, choice)
+			} else {
+				if choice.Current.Repo == image {
+					fmt.Println("Autodeploying to", choice.Deployment)
+					updateDeployment(client, choice)
+				}
+			}
+		}
 	} else {
-		displayChoices(choices)
-		chosen := getChosen(choices)
-		for _, c := range chosen {
-			updateDeployment(client, c)
+		if len(choices) == 0 {
+			fmt.Println("No containers require upgrade")
+		} else {
+			displayChoices(choices)
+			chosen := getChosen(choices)
+			for _, c := range chosen {
+				updateDeployment(client, c)
+			}
 		}
 	}
 	return nil

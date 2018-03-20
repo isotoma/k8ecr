@@ -30,7 +30,7 @@ func createSession() *session.Session {
 		Profile:           getProfile(),
 		SharedConfigState: session.SharedConfigEnable})
 	if err != nil {
-		fmt.Println("Errol")
+		fmt.Println(err)
 		os.Exit(1)
 	}
 	return sess

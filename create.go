@@ -80,6 +80,7 @@ func createRepository(name string) error {
 					"ecr:GetDownloadUrlForLayer",
 					"ecr:BatchGetImage",
 					"ecr:BatchCheckLayerAvailability",
+					"ecr:DescribeImages",
 				},
 			},
 		},
