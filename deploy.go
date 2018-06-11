@@ -224,11 +224,11 @@ func displayChoices(choices OptionList) {
 	}
 }
 
-func updateDeployment(client typed.DeploymentInterface, choice Option) {
+func updateDeployment(client typed.DeploymentInterface, choice Option) error {
 	fmt.Printf("Updating %s/%s to %s\n", choice.Deployment, choice.Container, choice.Latest)
 	deployment, err := client.Get(choice.Deployment, metav1.GetOptions{})
 	if err != nil {
-		panic(err)
+		return err
 	}
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == choice.Container {
@@ -238,11 +238,12 @@ func updateDeployment(client typed.DeploymentInterface, choice Option) {
 			deployment.Spec.Template.Spec.Containers[i].Image = newImage
 			_, err = client.Update(deployment)
 			if err != nil {
-				panic(err)
+				return err
 			}
 
 		}
 	}
+	return nil
 }
 
 func getChosen(choices OptionList) OptionList {
@@ -287,7 +288,10 @@ func (x *DeployCommand) Execute(args []string) error {
 		for _, choice := range choices {
 			if image == "-" {
 				fmt.Println("Autodeploying to", choice.Deployment)
-				updateDeployment(client, choice)
+				err := updateDeployment(client, choice)
+				if err != nil {
+					fmt.Println("Error updating", choice.Deployment)
+				}
 			} else {
 				if choice.Current.Repo == image {
 					fmt.Println("Autodeploying to", choice.Deployment)
