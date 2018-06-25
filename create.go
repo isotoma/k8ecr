@@ -64,7 +64,7 @@ type PolicyDocument struct {
 	Statement []StatementEntry
 }
 
-func createRepository(name string) error {
+func createRepository(name string) (*ecr.Repository, error) {
 	context := getContext()
 	principals := getPrincipals(context)
 	policy := PolicyDocument{
@@ -85,27 +85,38 @@ func createRepository(name string) error {
 			},
 		},
 	}
+
 	b, err := json.Marshal(&policy)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	svc := ecr.New(createSession())
-	svc.CreateRepository(&ecr.CreateRepositoryInput{
+	resp, createErr := svc.CreateRepository(&ecr.CreateRepositoryInput{
 		RepositoryName: &name,
 	})
+
+	if createErr != nil {
+		return nil, createErr
+	}
+
+	var repo = resp.Repository
 	svc.SetRepositoryPolicy(&ecr.SetRepositoryPolicyInput{
 		RepositoryName: aws.String(name),
 		PolicyText:     aws.String(string(b)),
 	})
-	return nil
+	return repo, nil
 }
 
 func (x *CreateCommand) Execute(args []string) error {
 	if len(args) == 0 {
 		return errors.New("No repository name specified")
 	} else {
-		createRepository(args[0])
+		repository, err := createRepository(args[0])
+		if err != nil {
+			return err
+		}
+		fmt.Println(*repository.RepositoryUri);
 	}
 	return nil
 }
