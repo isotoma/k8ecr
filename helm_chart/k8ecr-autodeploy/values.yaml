@@ -1,0 +1,22 @@
+replicaCount: 1
+
+image:
+  repository: isotoma/k8ecr-autodeploy
+  tag: latest
+  pullPolicy: IfNotPresent
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+podAnnotations: {}
+
+rbac:
+  create: false
+  serviceAccountName: default
+
+webhookUrl: ""
