@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ecr"
 
 	"github.com/Masterminds/semver"
+	"github.com/ashwanthkumar/slack-go-webhook"
 	"k8s.io/api/apps/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -65,20 +66,37 @@ func getAllRepositories(svc *ecr.ECR) ([]string, error) {
 	return repositories, nil
 }
 
-func getTagsForRepository(svc *ecr.ECR, repository string) ([]string, error) {
+func getTagsForRepositoryPage(svc *ecr.ECR, repository string, tagList []string, nextToken *string) ([]string, *string, error) {
 	response, err := svc.DescribeImages(&ecr.DescribeImagesInput{
 		RepositoryName: &repository,
+		NextToken:      nextToken,
 	})
 	if err != nil {
-		return nil, err
+		return tagList, nil, err
 	}
-	tagList := make([]string, 0)
 	for _, i := range response.ImageDetails {
 		for _, t := range i.ImageTags {
 			if *t != "latest" {
 				tagList = append(tagList, *t)
 			}
 		}
+	}
+	return tagList, response.NextToken, nil
+}
+
+func getTagsForRepository(svc *ecr.ECR, repository string) ([]string, error) {
+	tagList := make([]string, 0)
+	tagList, nextToken, err := getTagsForRepositoryPage(svc, repository, tagList, nil)
+	if err != nil {
+		return nil, err
+	}
+	for nextToken != nil {
+		fmt.Printf("NextToken is %s\n", *nextToken)
+		tagList, nextToken, err = getTagsForRepositoryPage(svc, repository, tagList, nextToken)
+		if err != nil {
+			return nil, err
+		}
+
 	}
 	return tagList, nil
 }
@@ -239,6 +257,15 @@ func updateDeployment(client typed.DeploymentInterface, choice Option) error {
 			_, err = client.Update(deployment)
 			if err != nil {
 				return err
+			}
+			if hook, ok := Webhooks[choice.Current.Repo]; ok {
+				payload := slack.Payload{
+					Text: fmt.Sprintf("%s updated to %s", choice.Deployment, choice.Latest),
+				}
+				err := slack.Send(hook, "", payload)
+				if len(err) > 0 {
+					fmt.Printf("error: %s\n", err)
+				}
 			}
 
 		}
