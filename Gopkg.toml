@@ -39,4 +39,12 @@
 
 [[constraint]]
   name = "k8s.io/client-go"
-  version = "6.0.0"
+  version = "8.0.0"
+
+[[constraint]]
+  name = "k8s.io/api"
+  version = "kubernetes-1.11.6"
+
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  version = "kubernetes-1.11.6"  

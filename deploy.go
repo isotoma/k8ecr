@@ -91,7 +91,6 @@ func getTagsForRepository(svc *ecr.ECR, repository string) ([]string, error) {
 		return nil, err
 	}
 	for nextToken != nil {
-		fmt.Printf("NextToken is %s\n", *nextToken)
 		tagList, nextToken, err = getTagsForRepositoryPage(svc, repository, tagList, nextToken)
 		if err != nil {
 			return nil, err
@@ -165,16 +164,27 @@ type Image struct {
 }
 
 func newImage(url string) Image {
-	p1 := strings.Split(url, "/")
-	p2 := strings.Split(p1[1], ":")
+	registry := ""
+	repo := ""
 	version := "latest"
+	p1 := strings.Split(url, "/")
+	var p2 []string
+	switch {
+	case len(p1) == 1:
+		p2 = strings.Split(p1[0], ":")
+	case len(p1) == 2:
+		p2 = strings.Split(p1[1], ":")
+	default:
+		panic(fmt.Errorf("Unexpected number of / in image"))
+	}
+	repo = p2[0]
 	if len(p2) == 2 {
 		version = p2[1]
 	}
 	return Image{
 		Original: url,
-		Registry: p1[0],
-		Repo:     p2[0],
+		Registry: registry,
+		Repo:     repo,
 		Version:  version,
 	}
 }
@@ -225,7 +235,7 @@ func getUpgradeOptions(current *OptionList, images map[string]string) OptionList
 func getUpgradeChoices(client typed.DeploymentInterface) (OptionList, error) {
 	deployments, err := client.List(metav1.ListOptions{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error listing deployments: %s", err)
 	}
 	current := getDeploymentContainerVersions(deployments)
 	images, err := getLatestImage()

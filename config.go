@@ -42,6 +42,7 @@ func setProfile(context string, profile string) {
 
 // Execute Config command
 func (x *ConfigCommand) Execute(args []string) error {
+	processOptions()
 	context := getContext()
 	if context == "" {
 		return errors.New("Unable to read kubectl context")

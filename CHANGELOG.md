@@ -1,3 +1,8 @@
+1.4.0 (2018-04-11)
+------------------
+
+- Support webhooks per image, for project specific slack channels
+
 1.3.0 (2018-03-20)
 ------------------
 
