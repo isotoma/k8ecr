@@ -164,10 +164,8 @@ type Image struct {
 }
 
 func newImage(url string) Image {
-	registry := ""
-	repo := ""
-	version := "latest"
 	p1 := strings.Split(url, "/")
+	registry := p1[0]
 	var p2 []string
 	switch {
 	case len(p1) == 1:
@@ -177,7 +175,8 @@ func newImage(url string) Image {
 	default:
 		panic(fmt.Errorf("Unexpected number of / in image"))
 	}
-	repo = p2[0]
+	repo := p2[0]
+	version := "latest"
 	if len(p2) == 2 {
 		version = p2[1]
 	}
