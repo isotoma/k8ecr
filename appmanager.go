@@ -9,6 +9,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// Container is a container found in a Deployment or Cronjob
 type Container struct {
 	Name    string
 	Current Image
