@@ -100,23 +100,6 @@ func getTagsForRepository(svc *ecr.ECR, repository string) ([]string, error) {
 	return tagList, nil
 }
 
-func getLatestImage() (map[string]string, error) {
-	svc := ecr.New(createSession())
-	repositories, err := getAllRepositories(svc)
-	if err != nil {
-		return nil, err
-	}
-	l := make(map[string]string)
-	for _, r := range repositories {
-		all, err := getTagsForRepository(svc, r)
-		if err != nil {
-			return nil, err
-		}
-		l[r] = latestVersion(all)
-	}
-	return l, nil
-}
-
 func getClusterConfig(kubeconfig string) (*rest.Config, error) {
 	if kubeconfig == "" {
 		// We are running in-cluster
@@ -148,39 +131,6 @@ func getClientSet() (*kubernetes.Clientset, error) {
 		return nil, err
 	}
 	return kubernetes.NewForConfig(config)
-}
-
-// Image represents an image currently deployed to a container
-type Image struct {
-	Original string
-	Repo     string
-	Registry string
-	Version  string
-}
-
-func newImage(url string) Image {
-	p1 := strings.Split(url, "/")
-	registry := p1[0]
-	var p2 []string
-	switch {
-	case len(p1) == 1:
-		p2 = strings.Split(p1[0], ":")
-	case len(p1) == 2:
-		p2 = strings.Split(p1[1], ":")
-	default:
-		panic(fmt.Errorf("Unexpected number of / in image"))
-	}
-	repo := p2[0]
-	version := "latest"
-	if len(p2) == 2 {
-		version = p2[1]
-	}
-	return Image{
-		Original: url,
-		Registry: registry,
-		Repo:     repo,
-		Version:  version,
-	}
 }
 
 type ResourceType int
@@ -242,7 +192,7 @@ func getUpgradeOptions(current *OptionList, images map[string]string) OptionList
 		if latest != "" && latest != o.Current.Version {
 			choices = append(choices, o)
 		} else {
-			Verbose.Printf("Ignoring %s/%s %s === %s\n", o.TypeName(), o.Name, o.Container, o.Current.Version, latest)
+			Verbose.Printf("Ignoring %s %s/%s %s === %s\n", o.TypeName(), o.Name, o.Container, o.Current.Version, latest)
 		}
 	}
 	return choices
@@ -258,7 +208,7 @@ func getUpgradeChoices(namespace string) (OptionList, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Error listing deployments: %s", err)
 	}
-	current := getDeploymentContainerVersions(deployments)
+	deployments := getDeploymentContainerVersions(deployments)
 	images, err := getLatestImage()
 	if err != nil {
 		return nil, err
@@ -269,12 +219,12 @@ func getUpgradeChoices(namespace string) (OptionList, error) {
 
 func displayChoices(choices OptionList) {
 	for i, c := range choices {
-		fmt.Printf("%d> %s/%s %s -> %s \n", i, c.TypeName, c.Name, c.Container, c.Current.Version, c.Latest)
+		fmt.Printf("%d> %s %s/%s %s -> %s \n", i, c.TypeName(), c.Name, c.Container, c.Current.Version, c.Latest)
 	}
 }
 
 func updateDeployment(client typed.DeploymentInterface, choice Option) error {
-	fmt.Printf("Updating %s %s/%s to %s\n", choice.TypeName, choice.Name, choice.Container, choice.Latest)
+	fmt.Printf("Updating %s %s/%s to %s\n", choice.TypeName(), choice.Name, choice.Container, choice.Latest)
 	deployment, err := client.Get(choice.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
