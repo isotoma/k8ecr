@@ -152,7 +152,6 @@ func getDeploymentsClient(namespace string) (typed.DeploymentInterface, error) {
 		return nil, err
 	}
 	return clientset.AppsV1beta1().Deployments(namespace), nil
-
 }
 
 // Image represents an image currently deployed to a container
