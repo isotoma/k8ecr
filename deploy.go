@@ -134,7 +134,7 @@ func getClusterConfig(kubeconfig string) (*rest.Config, error) {
 	}
 }
 
-func getDeploymentsClient(namespace string) (typed.DeploymentInterface, error) {
+func getClientSet() (*kubernetes.Clientset, error) {
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig == "" {
 		home := homeDir()
@@ -147,11 +147,7 @@ func getDeploymentsClient(namespace string) (typed.DeploymentInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return clientset.AppsV1beta1().Deployments(namespace), nil
+	return kubernetes.NewForConfig(config)
 }
 
 // Image represents an image currently deployed to a container
@@ -187,12 +183,33 @@ func newImage(url string) Image {
 	}
 }
 
+type ResourceType int
+
+const (
+	DeploymentResource ResourceType = 0
+	CronjobResource    ResourceType = 1
+)
+
 // Option is an option for upgrade
 type Option struct {
-	Deployment string
-	Container  string
-	Current    Image
-	Latest     string
+	Type      ResourceType
+	Name      string
+	App       string
+	Container string
+	Current   Image
+	Latest    string
+}
+
+// TypeName returns the type as a string
+func (o *Option) TypeName() string {
+	switch {
+	case o.Type == DeploymentResource:
+		return "Deployment"
+	case o.Type == CronjobResource:
+		return "Cronjob"
+	default:
+		return "ERROR"
+	}
 }
 
 // OptionList is a list of Options
@@ -206,9 +223,10 @@ func getDeploymentContainerVersions(deployments *v1beta1.DeploymentList) OptionL
 			for _, c := range d.Spec.Template.Spec.Containers {
 				containerName := c.Name
 				images = append(images, Option{
-					Deployment: deploymentName,
-					Container:  containerName,
-					Current:    newImage(c.Image),
+					Type:      DeploymentResource,
+					Name:      deploymentName,
+					Container: containerName,
+					Current:   newImage(c.Image),
 				})
 			}
 		}
@@ -224,13 +242,18 @@ func getUpgradeOptions(current *OptionList, images map[string]string) OptionList
 		if latest != "" && latest != o.Current.Version {
 			choices = append(choices, o)
 		} else {
-			Verbose.Printf("Ignoring %s/%s %s === %s\n", o.Deployment, o.Container, o.Current.Version, latest)
+			Verbose.Printf("Ignoring %s/%s %s === %s\n", o.TypeName(), o.Name, o.Container, o.Current.Version, latest)
 		}
 	}
 	return choices
 }
 
-func getUpgradeChoices(client typed.DeploymentInterface) (OptionList, error) {
+func getUpgradeChoices(namespace string) (OptionList, error) {
+	clientset, err := getClientSet()
+	if err != nil {
+		return nil, err
+	}
+	client := clientset.AppsV1beta1().Deployments(namespace)
 	deployments, err := client.List(metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("Error listing deployments: %s", err)
@@ -246,21 +269,21 @@ func getUpgradeChoices(client typed.DeploymentInterface) (OptionList, error) {
 
 func displayChoices(choices OptionList) {
 	for i, c := range choices {
-		fmt.Printf("%d> %s/%s %s -> %s \n", i, c.Deployment, c.Container, c.Current.Version, c.Latest)
+		fmt.Printf("%d> %s/%s %s -> %s \n", i, c.TypeName, c.Name, c.Container, c.Current.Version, c.Latest)
 	}
 }
 
 func updateDeployment(client typed.DeploymentInterface, choice Option) error {
-	fmt.Printf("Updating %s/%s to %s\n", choice.Deployment, choice.Container, choice.Latest)
-	deployment, err := client.Get(choice.Deployment, metav1.GetOptions{})
+	fmt.Printf("Updating %s %s/%s to %s\n", choice.TypeName, choice.Name, choice.Container, choice.Latest)
+	deployment, err := client.Get(choice.Name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 	for i, container := range deployment.Spec.Template.Spec.Containers {
 		if container.Name == choice.Container {
-			Verbose.Printf("%s/%s Image was %s\n", choice.Deployment, choice.Container, deployment.Spec.Template.Spec.Containers[0].Image)
+			Verbose.Printf("%s/%s Image was %s\n", choice.Name, choice.Container, deployment.Spec.Template.Spec.Containers[0].Image)
 			newImage := fmt.Sprintf("%s/%s:%s", choice.Current.Registry, choice.Current.Repo, choice.Latest)
-			Verbose.Printf("%s/%s new Image %s\n", choice.Deployment, choice.Container, newImage)
+			Verbose.Printf("%s/%s new Image %s\n", choice.Name, choice.Container, newImage)
 			deployment.Spec.Template.Spec.Containers[i].Image = newImage
 			_, err = client.Update(deployment)
 			if err != nil {
@@ -268,7 +291,7 @@ func updateDeployment(client typed.DeploymentInterface, choice Option) error {
 			}
 			if hook, ok := Webhooks[choice.Current.Repo]; ok {
 				payload := slack.Payload{
-					Text: fmt.Sprintf("%s updated to %s", choice.Deployment, choice.Latest),
+					Text: fmt.Sprintf("%s updated to %s", choice.Name, choice.Latest),
 				}
 				err := slack.Send(hook, "", payload)
 				if len(err) > 0 {
@@ -311,25 +334,26 @@ func (x *DeployCommand) Execute(args []string) error {
 	if len(args) == 2 {
 		image = args[1]
 	}
-	client, err := getDeploymentsClient(namespace)
+	choices, err := getUpgradeChoices(namespace)
 	if err != nil {
 		return err
 	}
-	choices, err := getUpgradeChoices(client)
+	clientset, err := getClientSet()
 	if err != nil {
 		return err
 	}
+	client := clientset.AppsV1beta1().Deployments(namespace)
 	if image != "" {
 		for _, choice := range choices {
 			if image == "-" {
-				fmt.Println("Autodeploying to", choice.Deployment)
+				fmt.Println("Autodeploying to", choice.Name)
 				err := updateDeployment(client, choice)
 				if err != nil {
-					fmt.Println("Error updating", choice.Deployment)
+					fmt.Println("Error updating", choice.Name)
 				}
 			} else {
 				if choice.Current.Repo == image {
-					fmt.Println("Autodeploying to", choice.Deployment)
+					fmt.Println("Autodeploying to", choice.Name)
 					updateDeployment(client, choice)
 				}
 			}
