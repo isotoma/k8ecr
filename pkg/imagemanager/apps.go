@@ -56,6 +56,10 @@ func (i *ImageMap) Versions() []string {
 	return rv
 }
 
+func (i *ImageMap) newImage() string {
+	return fmt.Sprintf("%s/%s:%s", i.ImageID.Registry, i.ImageID.Repo, i.UpdateTo)
+}
+
 // ImageManager finds and updates Imagelications
 // and their deployments and cronjobs
 type ImageManager struct {
@@ -77,6 +81,60 @@ func NewImageManager(namespace string) (*ImageManager, error) {
 	}
 	err = a.Scan()
 	return a, err
+}
+
+// UpgradeDeployments upgrades all deployments in the specified imagemap
+func (mgr *ImageManager) UpgradeDeployments(image *ImageMap) error {
+	client := mgr.clientset.AppsV1beta1().Deployments(mgr.Namespace)
+	for _, r := range image.Deployments {
+		fmt.Printf("Updating deployment %s container %s\n", r.ContainerID.Resource, r.ContainerID.Container)
+		item, err := client.Get(r.ContainerID.Resource, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		for i, container := range item.Spec.Template.Spec.Containers {
+			if container.Name == r.ContainerID.Container {
+				item.Spec.Template.Spec.Containers[i].Image = image.newImage()
+			}
+		}
+		_, err = client.Update(item)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// UpgradeCronjobs upgrades all cronjobs in the specified imagemap
+func (mgr *ImageManager) UpgradeCronjobs(image *ImageMap) error {
+	client := mgr.clientset.BatchV1beta1().CronJobs(mgr.Namespace)
+	for _, r := range image.Cronjobs {
+		fmt.Printf("Updating cronjob %s container %s\n", r.ContainerID.Resource, r.ContainerID.Container)
+		item, err := client.Get(r.ContainerID.Resource, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		for i, container := range item.Spec.JobTemplate.Spec.Template.Spec.Containers {
+			if container.Name == r.ContainerID.Container {
+				fmt.Printf("%s/%s image -> %s\n", r.ContainerID.Resource, r.ContainerID.Container, image.newImage())
+				item.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image = image.newImage()
+			}
+		}
+		_, err = client.Update(item)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Upgrade all of the resources using this image
+func (mgr *ImageManager) Upgrade(image *ImageMap) error {
+	fmt.Printf("Updating %s\n", image.ImageID.Repo)
+	if err := mgr.UpgradeDeployments(image); err != nil {
+		return err
+	}
+	return mgr.UpgradeCronjobs(image)
 }
 
 // SetLatest sets the latest version on the image
@@ -105,11 +163,6 @@ func (mgr *ImageManager) GetImages() []ImageMap {
 		images = append(images, v)
 	}
 	return images
-}
-
-// Deploy the specified Imagelication to the specified version
-func Deploy(Image string, version string) error {
-	return nil
 }
 
 func parse(url string) (ImageIdentifier, Version) {
@@ -152,9 +205,9 @@ func resources(name string, spec []corev1.Container) []Resource {
 	return res
 }
 
-func (a *ImageManager) scanDeployments() ([]Resource, error) {
+func (mgr *ImageManager) scanDeployments() ([]Resource, error) {
 	allResources := make([]Resource, 0)
-	client := a.clientset.AppsV1beta1().Deployments(a.Namespace)
+	client := mgr.clientset.AppsV1beta1().Deployments(mgr.Namespace)
 	response, err := client.List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -169,9 +222,9 @@ func (a *ImageManager) scanDeployments() ([]Resource, error) {
 	return allResources, nil
 }
 
-func (a *ImageManager) scanCronjobs() ([]Resource, error) {
+func (mgr *ImageManager) scanCronjobs() ([]Resource, error) {
 	allResources := make([]Resource, 0)
-	client := a.clientset.BatchV1beta1().CronJobs(a.Namespace)
+	client := mgr.clientset.BatchV1beta1().CronJobs(mgr.Namespace)
 	response, err := client.List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -218,15 +271,15 @@ func groupResources(deployments []Resource, cronjobs []Resource) map[ImageIdenti
 // Scan the specified namespace in the cluster and find
 // all the deployments and cronjobs
 // then create Imagelications
-func (a *ImageManager) Scan() error {
-	deployments, err := a.scanDeployments()
+func (mgr *ImageManager) Scan() error {
+	deployments, err := mgr.scanDeployments()
 	if err != nil {
 		return err
 	}
-	cronjobs, err := a.scanCronjobs()
+	cronjobs, err := mgr.scanCronjobs()
 	if err != nil {
 		return err
 	}
-	a.Images = groupResources(deployments, cronjobs)
+	mgr.Images = groupResources(deployments, cronjobs)
 	return nil
 }
