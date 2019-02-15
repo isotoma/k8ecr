@@ -1,6 +1,8 @@
 package ecr
 
 import (
+	"sort"
+
 	"github.com/aws/aws-sdk-go/service/ecr"
 )
 
@@ -44,4 +46,20 @@ func (r *Registry) FetchAll() error {
 		}
 	}
 	return nil
+}
+
+// GetRepositories gets a list of repositories in alphabetical order
+func (r *Registry) GetRepositories() []Repository {
+	keys := make([]string, len(r.Repositories))
+	i := 0
+	for k := range r.Repositories {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	repos := make([]Repository, len(keys))
+	for i, k := range keys {
+		repos[i] = r.Repositories[k]
+	}
+	return repos
 }

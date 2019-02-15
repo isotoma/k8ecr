@@ -1,6 +1,8 @@
-package apps
+package appmanager
 
 import (
+	"sort"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -37,25 +39,6 @@ import (
 // 	return nil
 // }
 
-// func getChosen(choices OptionList) OptionList {
-// 	fmt.Print("> ")
-// 	reader := bufio.NewReader(os.Stdin)
-// 	text, err := reader.ReadString('\n')
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	rv := make(OptionList, 0)
-// 	chosen := strings.Split(text, ",")
-// 	for _, c := range chosen {
-// 		i, err := strconv.ParseInt(strings.TrimSpace(c), 0, 64)
-// 		if err != nil {
-// 			panic(err)
-// 		}
-// 		rv = append(rv, choices[i])
-// 	}
-// 	return rv
-// }
-
 // Container is a container found in a Deployment or Cronjob
 type Container struct {
 	Name    string
@@ -78,6 +61,24 @@ type App struct {
 	Cronjobs    []Resource
 }
 
+// Versions gets all the versions for all the containers in this App
+func (a *App) Versions() map[string]string {
+	versions := make(map[string]string)
+	for _, item := range a.Deployments {
+		for _, container := range item.Containers {
+			// TODO maybe some comparisons to find oldest?
+			versions[container.Name] = container.Latest
+		}
+	}
+	for _, item := range a.Cronjobs {
+		for _, container := range item.Containers {
+			// TODO maybe some comparisons to find oldest?
+			versions[container.Name] = container.Latest
+		}
+	}
+	return versions
+}
+
 // AppManager finds and updates applications
 // and their deployments and cronjobs
 type AppManager struct {
@@ -86,16 +87,36 @@ type AppManager struct {
 	Apps      map[string]App
 }
 
-// Init initialises the application manager
-func (a *AppManager) Init(namespace string) error {
+// NewAppManager creates a new app manager
+func NewAppManager(namespace string) (*AppManager, error) {
 	clientset, err := getClientSet()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	a.clientset = clientset
-	a.Namespace = namespace
-	a.Apps = make(map[string]App)
-	return a.Scan()
+	a := &AppManager{
+		clientset: clientset,
+		Namespace: namespace,
+		Apps:      make(map[string]App),
+	}
+	err = a.Scan()
+	return a, err
+}
+
+// GetApps in alphabetical order
+func (a *AppManager) GetApps() []App {
+	keys := make([]string, len(a.Apps))
+	i := 0
+	for k := range a.Apps {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+	apps := make([]App, len(keys))
+	for i, k := range keys {
+		apps[i] = a.Apps[k]
+	}
+	return apps
+
 }
 
 // Deploy the specified application to the specified version
@@ -117,7 +138,7 @@ func makeContainerList(spec []corev1.Container) []Container {
 
 func (a *AppManager) scanDeployments() ([]Resource, error) {
 	resources := make([]Resource, 0)
-	client := a.clientset.AppsV1().Deployments(a.Namespace)
+	client := a.clientset.AppsV1beta1().Deployments(a.Namespace)
 	response, err := client.List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -126,7 +147,7 @@ func (a *AppManager) scanDeployments() ([]Resource, error) {
 		if item.Name != "" {
 			resource := Resource{
 				Name:       item.Name,
-				App:        item.ObjectMeta.Labels["App"],
+				App:        item.Spec.Template.ObjectMeta.Labels["app"],
 				Containers: makeContainerList(item.Spec.Template.Spec.Containers),
 			}
 			resources = append(resources, resource)
