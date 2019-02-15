@@ -8,6 +8,7 @@ import (
 
 // Repository represents a repository within the registry
 type Repository struct {
+	URI       string
 	Name      string
 	LatestTag string
 	Tags      []string
@@ -34,16 +35,14 @@ func (r *Registry) FetchAll() error {
 		return err
 	}
 	for _, repo := range repositories {
-		tags, err := getTagsForRepository(r.service, repo)
+		tags, err := getTagsForRepository(r.service, repo.Name)
 		if err != nil {
 			return err
 		}
 		latest := latestVersion(tags)
-		r.Repositories[repo] = Repository{
-			Name:      repo,
-			LatestTag: latest,
-			Tags:      tags,
-		}
+		repo.LatestTag = latest
+		repo.Tags = tags
+		r.Repositories[repo.Name] = repo
 	}
 	return nil
 }

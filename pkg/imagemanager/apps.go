@@ -34,8 +34,26 @@ type Resource struct {
 // ImageMap is a mapping of containers
 type ImageMap struct {
 	ImageID     ImageIdentifier
+	NeedsUpdate bool
+	UpdateTo    Version
 	Deployments []Resource
 	Cronjobs    []Resource
+}
+
+// Versions returns all versions in use for the image
+func (i *ImageMap) Versions() []Version {
+	versions := make(map[Version]bool)
+	for _, d := range i.Deployments {
+		versions[d.Current] = true
+	}
+	for _, c := range i.Deployments {
+		versions[c.Current] = true
+	}
+	rv := make([]Version, 0)
+	for v := range versions {
+		rv = append(rv, v)
+	}
+	return rv
 }
 
 // ImageManager finds and updates Imagelications
@@ -61,11 +79,29 @@ func NewImageManager(namespace string) (*ImageManager, error) {
 	return a, err
 }
 
+// SetLatest sets the latest version on the image
+// and flags if it needs update
+func (mgr *ImageManager) SetLatest(registry, repository, version string) {
+	id := ImageIdentifier{Registry: registry, Repo: repository}
+	imap, ok := mgr.Images[id]
+	if ok {
+		imap.UpdateTo = Version(version)
+		imap.NeedsUpdate = false
+		versions := imap.Versions()
+		for _, v := range versions {
+			if v != Version(version) {
+				imap.NeedsUpdate = true
+			}
+		}
+		mgr.Images[id] = imap
+	}
+}
+
 // GetImages in alphabetical order
-func (a *ImageManager) GetImages() []ImageMap {
+func (mgr *ImageManager) GetImages() []ImageMap {
 	// TODO SORTING
 	images := make([]ImageMap, 0)
-	for _, v := range a.Images {
+	for _, v := range mgr.Images {
 		images = append(images, v)
 	}
 	return images

@@ -5,14 +5,17 @@ import (
 )
 
 // GetAllRepositories Get all the repositories in the registry
-func getAllRepositories(svc *ecr.ECR) ([]string, error) {
+func getAllRepositories(svc *ecr.ECR) ([]Repository, error) {
 	response, err := svc.DescribeRepositories(&ecr.DescribeRepositoriesInput{})
 	if err != nil {
 		return nil, err
 	}
-	repositories := make([]string, len(response.Repositories))
+	repositories := make([]Repository, len(response.Repositories))
 	for i, r := range response.Repositories {
-		repositories[i] = *r.RepositoryName
+		repositories[i] = Repository{
+			Name: *r.RepositoryName,
+			URI:  *r.RepositoryUri,
+		}
 	}
 	return repositories, nil
 }
