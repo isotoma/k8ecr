@@ -1,4 +1,4 @@
-package appmanager
+package imagemanager
 
 import (
 	"reflect"
@@ -8,28 +8,28 @@ import (
 )
 
 func TestScanDeployments(t *testing.T) {
-	mgr := AppManager{
+	mgr := ImageManager{
 		clientset: fake.NewSimpleClientset(),
 		Namespace: "test",
-		Apps:      make(map[string]App),
+		Images:    make(map[string]Image),
 	}
 }
 
 func TestGroupResources(t *testing.T) {
-	r1 := Resource{Name: "r1", App: "app1"}
-	r2 := Resource{Name: "r2", App: "app1"}
-	a1d := App{
-		Name:        "app1",
+	r1 := Resource{Name: "r1", Image: "Image1"}
+	r2 := Resource{Name: "r2", Image: "Image1"}
+	a1d := Image{
+		Name:        "Image1",
 		Deployments: []Resource{r1},
 		Cronjobs:    []Resource{},
 	}
-	a1c := App{
-		Name:        "app1",
+	a1c := Image{
+		Name:        "Image1",
 		Deployments: []Resource{},
 		Cronjobs:    []Resource{r1},
 	}
-	a2 := App{
-		Name:        "app1",
+	a2 := Image{
+		Name:        "Image1",
 		Deployments: []Resource{r1},
 		Cronjobs:    []Resource{r2},
 	}
@@ -37,12 +37,12 @@ func TestGroupResources(t *testing.T) {
 		name        string
 		deployments []Resource
 		cronjobs    []Resource
-		result      map[string]App
+		result      map[string]Image
 	}{
-		{"empty", []Resource{}, []Resource{}, map[string]App{}},
-		{"one deployment", []Resource{r1}, []Resource{}, map[string]App{"app1": a1d}},
-		{"one cronjob", []Resource{}, []Resource{r1}, map[string]App{"app1": a1c}},
-		{"one of each", []Resource{r1}, []Resource{r2}, map[string]App{"app1": a2}},
+		{"empty", []Resource{}, []Resource{}, map[string]Image{}},
+		{"one deployment", []Resource{r1}, []Resource{}, map[string]Image{"Image1": a1d}},
+		{"one cronjob", []Resource{}, []Resource{r1}, map[string]Image{"Image1": a1c}},
+		{"one of each", []Resource{r1}, []Resource{r2}, map[string]Image{"Image1": a2}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
