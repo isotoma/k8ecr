@@ -1,3 +1,6 @@
-k8ecr: config.go create.go deploy.go main.go push.go util.go
-	CGO_ENABLED=0 go build
-	strip k8ecr
+GO ?= go
+BINDIR := $(CURDIR)/bin
+GOFLAGS :=
+
+build:
+	CGO_ENABLED=0 GOBIN=$(BINDIR) $(GO) install $(GOFLAGS) github.com/isotoma/k8ecr/cmd/...

@@ -1,9 +1,6 @@
-package main
+package apps
 
 import (
-	"os"
-	"path/filepath"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -37,22 +34,6 @@ type AppManager struct {
 	clientset *kubernetes.Clientset
 	Namespace string
 	Apps      map[string]App
-}
-
-func getClientSet() (*kubernetes.Clientset, error) {
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		home := homeDir()
-		defpath := filepath.Join(home, ".kube", "config")
-		if _, err := os.Stat(defpath); err == nil {
-			kubeconfig = defpath
-		}
-	}
-	config, err := getClusterConfig(kubeconfig)
-	if err != nil {
-		return nil, err
-	}
-	return kubernetes.NewForConfig(config)
 }
 
 // Init initialises the application manager
