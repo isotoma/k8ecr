@@ -6,6 +6,56 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// func updateDeployment(client typed.DeploymentInterface, choice Option) error {
+// 	fmt.Printf("Updating %s %s/%s to %s\n", choice.TypeName(), choice.Name, choice.Container, choice.Latest)
+// 	deployment, err := client.Get(choice.Name, metav1.GetOptions{})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	for i, container := range deployment.Spec.Template.Spec.Containers {
+// 		if container.Name == choice.Container {
+// 			Verbose.Printf("%s/%s Image was %s\n", choice.Name, choice.Container, deployment.Spec.Template.Spec.Containers[0].Image)
+// 			newImage := fmt.Sprintf("%s/%s:%s", choice.Current.Registry, choice.Current.Repo, choice.Latest)
+// 			Verbose.Printf("%s/%s new Image %s\n", choice.Name, choice.Container, newImage)
+// 			deployment.Spec.Template.Spec.Containers[i].Image = newImage
+// 			_, err = client.Update(deployment)
+// 			if err != nil {
+// 				return err
+// 			}
+// 			if hook, ok := Webhooks[choice.Current.Repo]; ok {
+// 				payload := slack.Payload{
+// 					Text: fmt.Sprintf("%s updated to %s", choice.Name, choice.Latest),
+// 				}
+// 				err := slack.Send(hook, "", payload)
+// 				if len(err) > 0 {
+// 					fmt.Printf("error: %s\n", err)
+// 				}
+// 			}
+
+// 		}
+// 	}
+// 	return nil
+// }
+
+// func getChosen(choices OptionList) OptionList {
+// 	fmt.Print("> ")
+// 	reader := bufio.NewReader(os.Stdin)
+// 	text, err := reader.ReadString('\n')
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	rv := make(OptionList, 0)
+// 	chosen := strings.Split(text, ",")
+// 	for _, c := range chosen {
+// 		i, err := strconv.ParseInt(strings.TrimSpace(c), 0, 64)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+// 		rv = append(rv, choices[i])
+// 	}
+// 	return rv
+// }
+
 // Container is a container found in a Deployment or Cronjob
 type Container struct {
 	Name    string
@@ -44,7 +94,13 @@ func (a *AppManager) Init(namespace string) error {
 	}
 	a.clientset = clientset
 	a.Namespace = namespace
+	a.Apps = make(map[string]App)
 	return a.Scan()
+}
+
+// Deploy the specified application to the specified version
+func Deploy(app string, version string) error {
+	return nil
 }
 
 func makeContainerList(spec []corev1.Container) []Container {

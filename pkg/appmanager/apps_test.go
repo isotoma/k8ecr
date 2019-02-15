@@ -3,7 +3,17 @@ package apps
 import (
 	"reflect"
 	"testing"
+
+	"k8s.io/client-go/kubernetes/fake"
 )
+
+func TestScanDeployments(t *testing.T) {
+	mgr := AppManager{
+		clientset: fake.NewSimpleClientset(),
+		Namespace: "test",
+		Apps:      make(map[string]App),
+	}
+}
 
 func TestGroupResources(t *testing.T) {
 	r1 := Resource{Name: "r1", App: "app1"}

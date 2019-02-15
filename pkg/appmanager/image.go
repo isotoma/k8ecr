@@ -3,8 +3,6 @@ package apps
 import (
 	"fmt"
 	"strings"
-
-	"github.com/aws/aws-sdk-go/service/ecr"
 )
 
 // Image represents an image currently deployed to a container
@@ -38,21 +36,4 @@ func newImage(url string) Image {
 		Repo:     repo,
 		Version:  version,
 	}
-}
-
-func getLatestImage() (map[string]string, error) {
-	svc := ecr.New(createSession())
-	repositories, err := getAllRepositories(svc)
-	if err != nil {
-		return nil, err
-	}
-	l := make(map[string]string)
-	for _, r := range repositories {
-		all, err := getTagsForRepository(svc, r)
-		if err != nil {
-			return nil, err
-		}
-		l[r] = latestVersion(all)
-	}
-	return l, nil
 }

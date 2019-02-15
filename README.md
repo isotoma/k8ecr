@@ -4,44 +4,30 @@ Utility for managing ecr repositories with kubernetes
 
 ## Building
 
-If you don't already have `dep` installed go get it from the releases page:
-
-    https://github.com/golang/dep/releases
-
-And put it in your path.
-
-Then:
-
-    dep ensure
-
-To install the dependencies into the vendor/ folder.
+    make vendor
+    make
 
 ## Concepts
 
-k8ecr provides tooling to make it easier to use docker images from ECR repositories in your Kubernetes clusters created by kops. In particular it understands the link between an AWS account and role (i.e. an AWS profile) and a Kubernetes context.
+k8ecr provides tooling to make it easier to use docker images from ECR repositories in your Kubernetes clusters created by kops. 
 
 It can:
 
 - create ECR repositories and grant appropriate permissions to your cluster roles.
 - push images to ECR repositories directly.
-- issue appropriate kubectl set image commands to update deployments.
+- issue appropriate kubectl set image commands to update deployments and associated resources.
 
 ## Usage
 
-    k8ecr config PROFILE
     k8ecr create REPOSITORY
     k8ecr push REPOSITORY VERSION...
-    k8ecr deploy
+    k8ecr deploy NAMESPACE
 
-## Configuration
+## Environment variables
 
-    k8ecr config PROFILE
+k8ecr expects KUBECONFIG and AWS_PROFILE to be correctly configured for your environment.
 
-This will link the current kubectl context to the specified AWS profile.
-
-This writes to the YAML config file ~/.k8ecr
-
-From now on the current kubectl context will be used to determine which AWS profile to use for AWS API calls.
+It uses these to interact with your cluster and your AWS account.
 
 ## Creating repositories
 
@@ -52,14 +38,16 @@ This will create an ECR repository in the current profile, and grant:
     ecr:GetDownloadUrlForLayer
     ecr:BatchGetImage
     ecr:BatchCheckLayerAvailability
+    ecr:DescribeImages
 
-To the IAM master and nodes role for the current cluster.
+To the IAM master and nodes role for the current cluster. These permissions will allow
+deployments to operate successfully.
 
 ## Pushing images
 
     k8ecr push REPOSITORY VERSION...
 
-This will log in to ECR, then push images to the remote repository with the specified versions.  For example:
+This will log in to ECR, then push images to the remote repository of the same name with the specified versions.  For example:
 
     k8ecr push myimage 1.0.0 latest
 

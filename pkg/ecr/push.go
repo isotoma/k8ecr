@@ -1,4 +1,4 @@
-package main
+package ecr
 
 import (
 	"bufio"
@@ -185,7 +185,8 @@ func push(client *docker.Client, creds types.AuthConfig, repo string, version st
 	}
 }
 
-func pushRepository(name string, versions []string) error {
+// PushRepository pushes
+func (r *Registry) PushRepository(name string, versions []string) error {
 	cli, creds, err := login()
 	if err != nil {
 		return err
@@ -197,20 +198,4 @@ func pushRepository(name string, versions []string) error {
 		}
 	}
 	return nil
-}
-
-// Execute the push command
-func (x *PushCommand) Execute(args []string) error {
-	if len(args) < 2 {
-		return errors.New("push REPOSITORY VERSION")
-	}
-	return pushRepository(args[0], args[1:])
-
-}
-
-func init() {
-	parser.AddCommand("push",
-		"Push",
-		"Push an image to ECR",
-		&pushCommand)
 }
