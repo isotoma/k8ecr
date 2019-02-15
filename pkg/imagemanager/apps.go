@@ -87,13 +87,13 @@ func NewImageManager(namespace string) (*ImageManager, error) {
 func (mgr *ImageManager) UpgradeDeployments(image *ImageMap) error {
 	client := mgr.clientset.AppsV1beta1().Deployments(mgr.Namespace)
 	for _, r := range image.Deployments {
-		fmt.Printf("Updating deployment %s container %s\n", r.ContainerID.Resource, r.ContainerID.Container)
 		item, err := client.Get(r.ContainerID.Resource, metav1.GetOptions{})
 		if err != nil {
 			return err
 		}
 		for i, container := range item.Spec.Template.Spec.Containers {
 			if container.Name == r.ContainerID.Container {
+				fmt.Printf("%s/%s image -> %s\n", r.ContainerID.Resource, r.ContainerID.Container, image.newImage())
 				item.Spec.Template.Spec.Containers[i].Image = image.newImage()
 			}
 		}
@@ -109,7 +109,6 @@ func (mgr *ImageManager) UpgradeDeployments(image *ImageMap) error {
 func (mgr *ImageManager) UpgradeCronjobs(image *ImageMap) error {
 	client := mgr.clientset.BatchV1beta1().CronJobs(mgr.Namespace)
 	for _, r := range image.Cronjobs {
-		fmt.Printf("Updating cronjob %s container %s\n", r.ContainerID.Resource, r.ContainerID.Container)
 		item, err := client.Get(r.ContainerID.Resource, metav1.GetOptions{})
 		if err != nil {
 			return err
