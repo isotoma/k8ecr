@@ -124,6 +124,7 @@ func groupResources(deployments []Resource, cronjobs []Resource) map[string]App 
 		app, ok := apps[item.App]
 		if !ok {
 			app = App{
+				Name:        item.App,
 				Deployments: make([]Resource, 0),
 				Cronjobs:    make([]Resource, 0),
 			}
@@ -135,6 +136,7 @@ func groupResources(deployments []Resource, cronjobs []Resource) map[string]App 
 		app, ok := apps[item.App]
 		if !ok {
 			app = App{
+				Name:        item.App,
 				Deployments: make([]Resource, 0),
 				Cronjobs:    make([]Resource, 0),
 			}
