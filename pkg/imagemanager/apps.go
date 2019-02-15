@@ -41,17 +41,17 @@ type ImageMap struct {
 }
 
 // Versions returns all versions in use for the image
-func (i *ImageMap) Versions() []Version {
+func (i *ImageMap) Versions() []string {
 	versions := make(map[Version]bool)
 	for _, d := range i.Deployments {
 		versions[d.Current] = true
 	}
-	for _, c := range i.Deployments {
+	for _, c := range i.Cronjobs {
 		versions[c.Current] = true
 	}
-	rv := make([]Version, 0)
+	rv := make([]string, 0)
 	for v := range versions {
-		rv = append(rv, v)
+		rv = append(rv, string(v))
 	}
 	return rv
 }
@@ -89,7 +89,7 @@ func (mgr *ImageManager) SetLatest(registry, repository, version string) {
 		imap.NeedsUpdate = false
 		versions := imap.Versions()
 		for _, v := range versions {
-			if v != Version(version) {
+			if v != version {
 				imap.NeedsUpdate = true
 			}
 		}

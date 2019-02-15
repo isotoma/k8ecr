@@ -108,6 +108,12 @@
   version = "v0.3.3"
 
 [[projects]]
+  name = "github.com/fatih/color"
+  packages = ["."]
+  revision = "5b77d2a35fb0ede96d138fc9a99f5c9b6aef11b4"
+  version = "v1.7.0"
+
+[[projects]]
   name = "github.com/ghodss/yaml"
   packages = ["."]
   revision = "0ca9ea5df5451ffdf184b4428c902747c2c11cd7"
@@ -193,6 +199,18 @@
   packages = ["."]
   revision = "1624edc4454b8682399def8740d46db5e4362ba4"
   version = "v1.1.5"
+
+[[projects]]
+  name = "github.com/mattn/go-colorable"
+  packages = ["."]
+  revision = "167de6bfdfba052fa6b2d3664c8f5272e23c9072"
+  version = "v0.0.9"
+
+[[projects]]
+  name = "github.com/mattn/go-isatty"
+  packages = ["."]
+  revision = "6ca4dbf54d38eea1a992b3c722a76a5d1c4cb25c"
+  version = "v0.0.4"
 
 [[projects]]
   name = "github.com/modern-go/concurrent"
@@ -495,6 +513,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "dd6291b301045f1ae76c5a860455a80380953a64b6996e3fe0e015a251c687b2"
+  inputs-digest = "d142a482df5a10f7d494e22a71dd320f29ff2dcccdce612febb687f1f5aca2be"
   solver-name = "gps-cdcl"
   solver-version = 1
