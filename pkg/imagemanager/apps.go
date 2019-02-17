@@ -28,10 +28,11 @@ type ContainerIdentifier struct {
 type Resource struct {
 	ContainerID ContainerIdentifier
 	ImageID     ImageIdentifier
+	App         string
 	Current     Version
 }
 
-// ImageMap is a mapping of containers
+// ImageMap is a mapping of containers that are for a specified App and Image
 type ImageMap struct {
 	ImageID     ImageIdentifier
 	NeedsUpdate bool
@@ -60,12 +61,26 @@ func (i *ImageMap) newImage() string {
 	return fmt.Sprintf("%s/%s:%s", i.ImageID.Registry, i.ImageID.Repo, i.UpdateTo)
 }
 
+// App is a group of images mapped to containers within resources in the app
+type App struct {
+	Name   string
+	Images map[ImageIdentifier]ImageMap
+}
+
+func (app *App) GetImages() []ImageMap {
+	images := make([]ImageMap, 0)
+	for _, v := range app.Images {
+		images = append(images, v)
+	}
+	return images
+}
+
 // ImageManager finds and updates Imagelications
 // and their deployments and cronjobs
 type ImageManager struct {
 	clientset *kubernetes.Clientset
 	Namespace string
-	Images    map[ImageIdentifier]ImageMap
+	Apps      map[string]App
 }
 
 // NewImageManager creates a new Image manager
@@ -77,7 +92,7 @@ func NewImageManager(namespace string) (*ImageManager, error) {
 	a := &ImageManager{
 		clientset: clientset,
 		Namespace: namespace,
-		Images:    make(map[ImageIdentifier]ImageMap),
+		Apps:      make(map[string]App),
 	}
 	err = a.Scan()
 	return a, err
@@ -140,17 +155,19 @@ func (mgr *ImageManager) Upgrade(image *ImageMap) error {
 // and flags if it needs update
 func (mgr *ImageManager) SetLatest(registry, repository, version string) {
 	id := ImageIdentifier{Registry: registry, Repo: repository}
-	imap, ok := mgr.Images[id]
-	if ok {
-		imap.UpdateTo = Version(version)
-		imap.NeedsUpdate = false
-		versions := imap.Versions()
-		for _, v := range versions {
-			if v != version {
-				imap.NeedsUpdate = true
+	for _, app := range mgr.Apps {
+		imap, ok := app.Images[id]
+		if ok {
+			imap.UpdateTo = Version(version)
+			imap.NeedsUpdate = false
+			versions := imap.Versions()
+			for _, v := range versions {
+				if v != version {
+					imap.NeedsUpdate = true
+				}
 			}
+			app.Images[id] = imap
 		}
-		mgr.Images[id] = imap
 	}
 }
 
@@ -158,8 +175,10 @@ func (mgr *ImageManager) SetLatest(registry, repository, version string) {
 func (mgr *ImageManager) GetImages() []ImageMap {
 	// TODO SORTING
 	images := make([]ImageMap, 0)
-	for _, v := range mgr.Images {
-		images = append(images, v)
+	for _, a := range mgr.Apps {
+		for _, v := range a.Images {
+			images = append(images, v)
+		}
 	}
 	return images
 }
@@ -187,7 +206,7 @@ func parse(url string) (ImageIdentifier, Version) {
 	}, Version(version)
 }
 
-func resources(name string, spec []corev1.Container) []Resource {
+func resources(name string, meta metav1.ObjectMeta, spec []corev1.Container) []Resource {
 	res := make([]Resource, 0)
 	for _, c := range spec {
 		id, version := parse(c.Image)
@@ -197,6 +216,7 @@ func resources(name string, spec []corev1.Container) []Resource {
 				Container: c.Name,
 			},
 			ImageID: id,
+			App:     meta.Labels["app"],
 			Current: version,
 		}
 		res = append(res, r)
@@ -213,7 +233,7 @@ func (mgr *ImageManager) scanDeployments() ([]Resource, error) {
 	}
 	for _, item := range response.Items {
 		if item.Name != "" {
-			for _, r := range resources(item.Name, item.Spec.Template.Spec.Containers) {
+			for _, r := range resources(item.Name, item.ObjectMeta, item.Spec.Template.Spec.Containers) {
 				allResources = append(allResources, r)
 			}
 		}
@@ -230,7 +250,7 @@ func (mgr *ImageManager) scanCronjobs() ([]Resource, error) {
 	}
 	for _, item := range response.Items {
 		if item.Name != "" {
-			for _, r := range resources(item.Name, item.Spec.JobTemplate.Spec.Template.Spec.Containers) {
+			for _, r := range resources(item.Name, item.ObjectMeta, item.Spec.JobTemplate.Spec.Template.Spec.Containers) {
 				allResources = append(allResources, r)
 			}
 		}
@@ -238,10 +258,18 @@ func (mgr *ImageManager) scanCronjobs() ([]Resource, error) {
 	return allResources, nil
 }
 
-func groupResources(deployments []Resource, cronjobs []Resource) map[ImageIdentifier]ImageMap {
-	images := make(map[ImageIdentifier]ImageMap)
-	for _, item := range deployments {
-		image, ok := images[item.ImageID]
+type appender func(m *ImageMap, r *Resource)
+
+func groupResources2(resources []Resource, apps map[string]App, fn appender) {
+	for _, item := range resources {
+		app, ok := apps[item.App]
+		if !ok {
+			app = App{
+				Name:   item.App,
+				Images: make(map[ImageIdentifier]ImageMap),
+			}
+		}
+		image, ok := app.Images[item.ImageID]
 		if !ok {
 			image = ImageMap{
 				ImageID:     item.ImageID,
@@ -249,22 +277,23 @@ func groupResources(deployments []Resource, cronjobs []Resource) map[ImageIdenti
 				Cronjobs:    make([]Resource, 0),
 			}
 		}
-		image.Deployments = append(image.Deployments, item)
-		images[item.ImageID] = image
+		fn(&image, &item)
+		app.Images[item.ImageID] = image
+		apps[app.Name] = app
 	}
-	for _, item := range cronjobs {
-		image, ok := images[item.ImageID]
-		if !ok {
-			image = ImageMap{
-				ImageID:     item.ImageID,
-				Deployments: make([]Resource, 0),
-				Cronjobs:    make([]Resource, 0),
-			}
-		}
-		image.Cronjobs = append(image.Cronjobs, item)
-		images[item.ImageID] = image
+}
+
+func groupResources(deployments []Resource, cronjobs []Resource) map[string]App {
+	apps := make(map[string]App)
+	appendDeployment := func(m *ImageMap, r *Resource) {
+		m.Deployments = append(m.Deployments, *r)
 	}
-	return images
+	groupResources2(deployments, apps, appendDeployment)
+	appendCronjob := func(m *ImageMap, r *Resource) {
+		m.Cronjobs = append(m.Deployments, *r)
+	}
+	groupResources2(cronjobs, apps, appendCronjob)
+	return apps
 }
 
 // Scan the specified namespace in the cluster and find
@@ -279,6 +308,6 @@ func (mgr *ImageManager) Scan() error {
 	if err != nil {
 		return err
 	}
-	mgr.Images = groupResources(deployments, cronjobs)
+	mgr.Apps = groupResources(deployments, cronjobs)
 	return nil
 }
