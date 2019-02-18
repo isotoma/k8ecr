@@ -75,12 +75,64 @@ func (app *App) GetImages() []ImageMap {
 	return images
 }
 
+type ResourceType struct {
+	APIVersion string
+	Kind       string
+}
+
+type ResourceManager struct {
+	Scanner func(mgr *ImageManager) ([]Resource, error)
+}
+
 // ImageManager finds and updates Imagelications
 // and their deployments and cronjobs
 type ImageManager struct {
 	clientset kubernetes.Interface
 	Namespace string
 	Apps      map[string]App
+	Managers  map[ResourceType]ResourceManager
+}
+
+func scanDeployments(mgr *ImageManager) ([]Resource, error) {
+	allResources := make([]Resource, 0)
+	client := mgr.clientset.AppsV1beta1().Deployments(mgr.Namespace)
+	response, err := client.List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range response.Items {
+		if item.Name != "" {
+			for _, r := range resources(item.Name, item.ObjectMeta, item.Spec.Template.Spec.Containers) {
+				allResources = append(allResources, r)
+			}
+		}
+	}
+	return allResources, nil
+}
+
+var DeploymentManager = ResourceManager{
+	Scanner: scanDeployments,
+}
+
+func scanCronjobs(mgr *ImageManager) ([]Resource, error) {
+	allResources := make([]Resource, 0)
+	client := mgr.clientset.BatchV1beta1().CronJobs(mgr.Namespace)
+	response, err := client.List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range response.Items {
+		if item.Name != "" {
+			for _, r := range resources(item.Name, item.ObjectMeta, item.Spec.JobTemplate.Spec.Template.Spec.Containers) {
+				allResources = append(allResources, r)
+			}
+		}
+	}
+	return allResources, nil
+}
+
+var CronjobManager = ResourceManager{
+	Scanner: scanCronjobs,
 }
 
 // NewImageManager creates a new Image manager
@@ -93,6 +145,12 @@ func NewImageManager(namespace string) (*ImageManager, error) {
 		clientset: clientset,
 		Namespace: namespace,
 		Apps:      make(map[string]App),
+		Managers: map[ResourceType]ResourceManager{
+			ResourceType{
+				APIVersion: "apps/v1beta1",
+				Kind:       "Deployment",
+			}: DeploymentManager,
+		},
 	}
 	err = a.Scan()
 	return a, err
@@ -222,40 +280,6 @@ func resources(name string, meta metav1.ObjectMeta, spec []corev1.Container) []R
 		res = append(res, r)
 	}
 	return res
-}
-
-func (mgr *ImageManager) scanDeployments() ([]Resource, error) {
-	allResources := make([]Resource, 0)
-	client := mgr.clientset.AppsV1beta1().Deployments(mgr.Namespace)
-	response, err := client.List(metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range response.Items {
-		if item.Name != "" {
-			for _, r := range resources(item.Name, item.ObjectMeta, item.Spec.Template.Spec.Containers) {
-				allResources = append(allResources, r)
-			}
-		}
-	}
-	return allResources, nil
-}
-
-func (mgr *ImageManager) scanCronjobs() ([]Resource, error) {
-	allResources := make([]Resource, 0)
-	client := mgr.clientset.BatchV1beta1().CronJobs(mgr.Namespace)
-	response, err := client.List(metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	for _, item := range response.Items {
-		if item.Name != "" {
-			for _, r := range resources(item.Name, item.ObjectMeta, item.Spec.JobTemplate.Spec.Template.Spec.Containers) {
-				allResources = append(allResources, r)
-			}
-		}
-	}
-	return allResources, nil
 }
 
 type appender func(m *ImageMap, r *Resource)
