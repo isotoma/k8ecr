@@ -78,7 +78,7 @@ func (app *App) GetImages() []ImageMap {
 // ImageManager finds and updates Imagelications
 // and their deployments and cronjobs
 type ImageManager struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 	Namespace string
 	Apps      map[string]App
 }

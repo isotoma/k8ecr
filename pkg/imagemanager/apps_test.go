@@ -11,13 +11,35 @@ func TestScanDeployments(t *testing.T) {
 	mgr := ImageManager{
 		clientset: fake.NewSimpleClientset(),
 		Namespace: "test",
-		Images:    make(map[string]Image),
+		Apps:      make(map[string]App),
 	}
 }
 
 func TestGroupResources(t *testing.T) {
-	r1 := Resource{Name: "r1", Image: "Image1"}
-	r2 := Resource{Name: "r2", Image: "Image1"}
+	r1 := Resource{
+		ContainerID: ContainerIdentifier{
+			Resource:  "r1",
+			Container: "c1",
+		},
+		ImageID: ImageIdentifier{
+			Repo:     "repo1",
+			Registry: "image1",
+		},
+		App:     "app1",
+		Current: "1.0.0",
+	}
+	r2 := Resource{
+		ContainerID: ContainerIdentifier{
+			Resource:  "r2",
+			Container: "c1",
+		},
+		ImageID: ImageIdentifier{
+			Repo:     "repo1",
+			Registry: "image1",
+		},
+		App:     "app1",
+		Current: "1.0.0",
+	}
 	a1d := Image{
 		Name:        "Image1",
 		Deployments: []Resource{r1},
