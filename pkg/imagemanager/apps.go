@@ -3,7 +3,6 @@ package imagemanager
 import (
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -35,18 +34,25 @@ type ImageMap struct {
 	ImageID     ImageIdentifier
 	NeedsUpdate bool
 	UpdateTo    Version
-	Deployments []Resource
-	Cronjobs    []Resource
+	Resources   map[string][]Resource
+}
+
+func NewImageMap(ID ImageIdentifier) *ImageMap {
+	return &ImageMap{
+		ImageID:     ID,
+		NeedsUpdate: false,
+		UpdateTo:    "",
+		Resources:   make(map[string][]Resource),
+	}
 }
 
 // Versions returns all versions in use for the image
 func (i *ImageMap) Versions() []string {
 	versions := make(map[Version]bool)
-	for _, d := range i.Deployments {
-		versions[d.Current] = true
-	}
-	for _, c := range i.Cronjobs {
-		versions[c.Current] = true
+	for _, resources := range i.Resources {
+		for _, item := range resources {
+			versions[item.Current] = true
+		}
 	}
 	rv := make([]string, 0)
 	for v := range versions {
@@ -55,7 +61,7 @@ func (i *ImageMap) Versions() []string {
 	return rv
 }
 
-func (i *ImageMap) newImage() string {
+func (i *ImageMap) NewImage() string {
 	return fmt.Sprintf("%s/%s:%s", i.ImageID.Registry, i.ImageID.Repo, i.UpdateTo)
 }
 
@@ -63,6 +69,13 @@ func (i *ImageMap) newImage() string {
 type App struct {
 	Name   string
 	Images map[ImageIdentifier]ImageMap
+}
+
+func NewApp(name string) *App {
+	return &App{
+		Name:   name,
+		Images: make(map[ImageIdentifier]ImageMap),
+	}
 }
 
 func (app *App) GetImages() []ImageMap {
@@ -77,65 +90,23 @@ type ResourceManager struct {
 	Kind      string
 	Fetcher   func(mgr *ImageManager) ([]interface{}, error)
 	Generator func(item interface{}) []Resource
+	Upgrade   func(mgr *ImageManager, image *ImageMap, resource Resource) error
 }
 
-var resourceManagers = []*ResourceManager{}
+var resourceManagers = map[string]*ResourceManager{}
 
 func RegisterResource(r *ResourceManager) {
-	resourceManagers = append(resourceManagers, r)
+	resourceManagers[r.Kind] = r
 }
 
-// ImageManager finds and updates Imagelications
+// ImageManager finds and updates Applications
 // and their deployments and cronjobs
 type ImageManager struct {
 	ClientSet kubernetes.Interface
 	Namespace string
 	Apps      map[string]App
-	Managers  map[string]ResourceManager
+	Managers  map[string]*ResourceManager
 }
-
-// func scanDeployments(mgr *ImageManager) ([]Resource, error) {
-// 	allResources := make([]Resource, 0)
-// 	client := mgr.clientset.AppsV1beta1().Deployments(mgr.Namespace)
-// 	response, err := client.List(metav1.ListOptions{})
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	for _, item := range response.Items {
-// 		if item.Name != "" {
-// 			for _, r := range resources(item.Name, item.ObjectMeta, item.Spec.Template.Spec.Containers) {
-// 				allResources = append(allResources, r)
-// 			}
-// 		}
-// 	}
-// 	return allResources, nil
-// }
-
-// var DeploymentManager = ResourceManager{
-
-// 	Scanner: scanDeployments,
-// }
-
-// func scanCronjobs(mgr *ImageManager) ([]Resource, error) {
-// 	allResources := make([]Resource, 0)
-// 	client := mgr.clientset.BatchV1beta1().CronJobs(mgr.Namespace)
-// 	response, err := client.List(metav1.ListOptions{})
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	for _, item := range response.Items {
-// 		if item.Name != "" {
-// 			for _, r := range resources(item.Name, item.ObjectMeta, item.Spec.JobTemplate.Spec.Template.Spec.Containers) {
-// 				allResources = append(allResources, r)
-// 			}
-// 		}
-// 	}
-// 	return allResources, nil
-// }
-
-// var CronjobManager = ResourceManager{
-// 	Scanner: scanCronjobs,
-// }
 
 // NewImageManager creates a new Image manager
 func NewImageManager(namespace string) (*ImageManager, error) {
@@ -147,62 +118,25 @@ func NewImageManager(namespace string) (*ImageManager, error) {
 		ClientSet: clientset,
 		Namespace: namespace,
 		Apps:      make(map[string]App),
+		Managers:  resourceManagers,
 	}
 	err = a.Scan()
 	return a, err
 }
 
-// UpgradeDeployments upgrades all deployments in the specified imagemap
-func (mgr *ImageManager) UpgradeDeployments(image *ImageMap) error {
-	client := mgr.ClientSet.AppsV1beta1().Deployments(mgr.Namespace)
-	for _, r := range image.Deployments {
-		item, err := client.Get(r.ContainerID.Resource, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		for i, container := range item.Spec.Template.Spec.Containers {
-			if container.Name == r.ContainerID.Container {
-				fmt.Printf("%s/%s image -> %s\n", r.ContainerID.Resource, r.ContainerID.Container, image.newImage())
-				item.Spec.Template.Spec.Containers[i].Image = image.newImage()
-			}
-		}
-		_, err = client.Update(item)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// UpgradeCronjobs upgrades all cronjobs in the specified imagemap
-func (mgr *ImageManager) UpgradeCronjobs(image *ImageMap) error {
-	client := mgr.ClientSet.BatchV1beta1().CronJobs(mgr.Namespace)
-	for _, r := range image.Cronjobs {
-		item, err := client.Get(r.ContainerID.Resource, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		for i, container := range item.Spec.JobTemplate.Spec.Template.Spec.Containers {
-			if container.Name == r.ContainerID.Container {
-				fmt.Printf("%s/%s image -> %s\n", r.ContainerID.Resource, r.ContainerID.Container, image.newImage())
-				item.Spec.JobTemplate.Spec.Template.Spec.Containers[i].Image = image.newImage()
-			}
-		}
-		_, err = client.Update(item)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Upgrade all of the resources using this image
 func (mgr *ImageManager) Upgrade(image *ImageMap) error {
-	fmt.Printf("Updating %s\n", image.ImageID.Repo)
-	if err := mgr.UpgradeDeployments(image); err != nil {
-		return err
+	fmt.Printf("Updating image %s:\n", image.ImageID.Repo)
+	for kind, resources := range image.Resources {
+		for _, resource := range resources {
+			fmt.Printf("    %s %s/%s\n", kind, resource.ContainerID.Resource, resource.ContainerID.Container)
+			err := mgr.Managers[kind].Upgrade(mgr, image, resource)
+			if err != nil {
+				return err
+			}
+		}
 	}
-	return mgr.UpgradeCronjobs(image)
+	return nil
 }
 
 // SetLatest sets the latest version on the image
@@ -237,56 +171,40 @@ func (mgr *ImageManager) GetImages() []ImageMap {
 	return images
 }
 
-type appender func(m *ImageMap, r *Resource)
-
-func groupResources2(resources []Resource, apps map[string]App, fn appender) {
-	for _, item := range resources {
-		app, ok := apps[item.App]
-		if !ok {
-			app = App{
-				Name:   item.App,
-				Images: make(map[ImageIdentifier]ImageMap),
-			}
-		}
-		image, ok := app.Images[item.ImageID]
-		if !ok {
-			image = ImageMap{
-				ImageID:     item.ImageID,
-				Deployments: make([]Resource, 0),
-				Cronjobs:    make([]Resource, 0),
-			}
-		}
-		fn(&image, &item)
-		app.Images[item.ImageID] = image
-		apps[app.Name] = app
-	}
-}
-
-func groupResources(deployments []Resource, cronjobs []Resource) map[string]App {
+func groupResources(resources map[string][]Resource) map[string]App {
 	apps := make(map[string]App)
-	appendDeployment := func(m *ImageMap, r *Resource) {
-		m.Deployments = append(m.Deployments, *r)
+	for kind, resources := range resources {
+		for _, item := range resources {
+			app, ok := apps[item.App]
+			if !ok {
+				app = *NewApp(item.App)
+			}
+			image, ok := app.Images[item.ImageID]
+			if !ok {
+				image = *NewImageMap(item.ImageID)
+			}
+			image.Resources[kind] = append(image.Resources[kind], item)
+			app.Images[item.ImageID] = image
+			apps[app.Name] = app
+		}
 	}
-	groupResources2(deployments, apps, appendDeployment)
-	appendCronjob := func(m *ImageMap, r *Resource) {
-		m.Cronjobs = append(m.Cronjobs, *r)
-	}
-	groupResources2(cronjobs, apps, appendCronjob)
 	return apps
 }
 
-// Scan the specified namespace in the cluster and find
-// all the deployments and cronjobs
-// then create Imagelications
 func (mgr *ImageManager) Scan() error {
-	// deployments, err := mgr.scanDeployments()
-	// if err != nil {
-	// 	return err
-	// }
-	// cronjobs, err := mgr.scanCronjobs()
-	// if err != nil {
-	// 	return err
-	// }
-	// mgr.Apps = groupResources(deployments, cronjobs)
+	resources := make(map[string][]Resource)
+	for _, rm := range resourceManagers {
+		resources[rm.Kind] = make([]Resource, 0)
+		items, err := rm.Fetcher(mgr)
+		if err != nil {
+			return err
+		}
+		for _, item := range items {
+			for _, r := range rm.Generator(item) {
+				resources[rm.Kind] = append(resources[rm.Kind], r)
+			}
+		}
+	}
+	mgr.Apps = groupResources(resources)
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/gosuri/uitable"
 	"github.com/isotoma/k8ecr/pkg/ecr"
 	"github.com/isotoma/k8ecr/pkg/imagemanager"
+	"github.com/isotoma/k8ecr/pkg/resources"
 )
 
 // DeployCommand has no options
@@ -18,7 +19,6 @@ var deployCommand DeployCommand
 func filter(registry *ecr.Registry, mgr *imagemanager.ImageManager) error {
 	for _, repo := range registry.GetRepositories() {
 		parts := strings.Split(repo.URI, "/")
-		fmt.Printf("%s %s %s\n", parts[0], parts[1], repo.LatestTag)
 		mgr.SetLatest(parts[0], parts[1], repo.LatestTag)
 	}
 	return nil
@@ -31,11 +31,21 @@ func autodeploy(mgr *imagemanager.ImageManager) error {
 func chooser(mgr *imagemanager.ImageManager) error {
 	table := uitable.New()
 	table.MaxColWidth = 120
-	table.AddRow("APP", "IMAGE", "LATEST", "OLD VERSIONS", "DEPLOYMENTS", "CRONJOBS")
+	cols := []interface{}{"APP", "IMAGE", "LATEST", "OLD VERSIONS"}
+	kinds := make([]string, 0)
+	for kind := range mgr.Managers {
+		kinds = append(kinds, kind)
+		cols = append(cols, fmt.Sprintf("%sS", strings.ToUpper(kind)))
+	}
+	table.AddRow(cols...)
 	for _, app := range mgr.Apps {
 		for _, image := range app.GetImages() {
 			if image.NeedsUpdate {
-				table.AddRow(app.Name, image.ImageID.Repo, image.UpdateTo, strings.Join(image.Versions(), ", "), len(image.Deployments), len(image.Cronjobs))
+				row := []interface{}{app.Name, image.ImageID.Repo, image.UpdateTo, strings.Join(image.Versions(), ", ")}
+				for _, kind := range kinds {
+					row = append(row, len(image.Resources[kind]))
+				}
+				table.AddRow(row...)
 			}
 		}
 	}
@@ -90,6 +100,7 @@ func (x *DeployCommand) Execute(args []string) error {
 }
 
 func init() {
+	resources.Register()
 	parser.AddCommand(
 		"deploy",
 		"Deploy",
