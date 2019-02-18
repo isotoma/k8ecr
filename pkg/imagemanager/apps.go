@@ -290,7 +290,7 @@ func groupResources(deployments []Resource, cronjobs []Resource) map[string]App 
 	}
 	groupResources2(deployments, apps, appendDeployment)
 	appendCronjob := func(m *ImageMap, r *Resource) {
-		m.Cronjobs = append(m.Deployments, *r)
+		m.Cronjobs = append(m.Cronjobs, *r)
 	}
 	groupResources2(cronjobs, apps, appendCronjob)
 	return apps

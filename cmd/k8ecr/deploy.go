@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fatih/color"
+	"github.com/gosuri/uitable"
 	"github.com/isotoma/k8ecr/pkg/ecr"
 	"github.com/isotoma/k8ecr/pkg/imagemanager"
 )
@@ -29,27 +29,23 @@ func autodeploy(mgr *imagemanager.ImageManager) error {
 }
 
 func chooser(mgr *imagemanager.ImageManager) error {
-	cyan := color.New(color.FgCyan).Add(color.Underline).SprintFunc()
-	green := color.New(color.FgGreen).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
+	table := uitable.New()
+	table.MaxColWidth = 120
+	table.AddRow("APP", "IMAGE", "LATEST", "OLD VERSIONS", "DEPLOYMENTS", "CRONJOBS")
 	for _, app := range mgr.Apps {
 		for _, image := range app.GetImages() {
 			if image.NeedsUpdate {
-				fmt.Printf("%-12s:%-30s [%-16s] <- [%-16s] (%s deployments and %s cronjobs) \n",
-					green(app.Name),
-					cyan(image.ImageID.Repo),
-					red(image.UpdateTo),
-					green(strings.Join(image.Versions(), ", ")),
-					yellow(len(image.Deployments)), yellow(len(image.Cronjobs)))
+				table.AddRow(app.Name, image.ImageID.Repo, image.UpdateTo, strings.Join(image.Versions(), ", "), len(image.Deployments), len(image.Cronjobs))
 			}
 		}
 	}
+	fmt.Println(table)
 	var input string
-	fmt.Print("image? > ")
+	fmt.Print("app? > ")
 	fmt.Scanln(&input)
-	for _, image := range mgr.GetImages() {
-		if image.ImageID.Repo == input {
+	app, ok := mgr.Apps[input]
+	if ok {
+		for _, image := range app.GetImages() {
 			if image.NeedsUpdate {
 				return mgr.Upgrade(&image)
 			}
@@ -57,7 +53,7 @@ func chooser(mgr *imagemanager.ImageManager) error {
 			return nil
 		}
 	}
-	fmt.Printf("Image not known\n")
+	fmt.Printf("App not known\n")
 	return nil
 }
 
