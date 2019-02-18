@@ -2,7 +2,6 @@ package imagemanager
 
 import (
 	"fmt"
-	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -75,14 +74,21 @@ func (app *App) GetImages() []ImageMap {
 }
 
 type ResourceManager struct {
-	Kind    string
-	Scanner func(mgr *ImageManager) ([]Resource, error)
+	Kind      string
+	Fetcher   func(mgr *ImageManager) ([]interface{}, error)
+	Generator func(item interface{}) []Resource
+}
+
+var resourceManagers = []*ResourceManager{}
+
+func RegisterResource(r *ResourceManager) {
+	resourceManagers = append(resourceManagers, r)
 }
 
 // ImageManager finds and updates Imagelications
 // and their deployments and cronjobs
 type ImageManager struct {
-	clientset kubernetes.Interface
+	ClientSet kubernetes.Interface
 	Namespace string
 	Apps      map[string]App
 	Managers  map[string]ResourceManager
@@ -138,7 +144,7 @@ func NewImageManager(namespace string) (*ImageManager, error) {
 		return nil, err
 	}
 	a := &ImageManager{
-		clientset: clientset,
+		ClientSet: clientset,
 		Namespace: namespace,
 		Apps:      make(map[string]App),
 	}
@@ -148,7 +154,7 @@ func NewImageManager(namespace string) (*ImageManager, error) {
 
 // UpgradeDeployments upgrades all deployments in the specified imagemap
 func (mgr *ImageManager) UpgradeDeployments(image *ImageMap) error {
-	client := mgr.clientset.AppsV1beta1().Deployments(mgr.Namespace)
+	client := mgr.ClientSet.AppsV1beta1().Deployments(mgr.Namespace)
 	for _, r := range image.Deployments {
 		item, err := client.Get(r.ContainerID.Resource, metav1.GetOptions{})
 		if err != nil {
@@ -170,7 +176,7 @@ func (mgr *ImageManager) UpgradeDeployments(image *ImageMap) error {
 
 // UpgradeCronjobs upgrades all cronjobs in the specified imagemap
 func (mgr *ImageManager) UpgradeCronjobs(image *ImageMap) error {
-	client := mgr.clientset.BatchV1beta1().CronJobs(mgr.Namespace)
+	client := mgr.ClientSet.BatchV1beta1().CronJobs(mgr.Namespace)
 	for _, r := range image.Cronjobs {
 		item, err := client.Get(r.ContainerID.Resource, metav1.GetOptions{})
 		if err != nil {
@@ -229,29 +235,6 @@ func (mgr *ImageManager) GetImages() []ImageMap {
 		}
 	}
 	return images
-}
-
-func parse(url string) (ImageIdentifier, Version) {
-	p1 := strings.Split(url, "/")
-	registry := p1[0]
-	var p2 []string
-	switch {
-	case len(p1) == 1:
-		p2 = strings.Split(p1[0], ":")
-	case len(p1) == 2:
-		p2 = strings.Split(p1[1], ":")
-	default:
-		panic(fmt.Errorf("Unexpected number of / in image"))
-	}
-	repo := p2[0]
-	version := "latest"
-	if len(p2) == 2 {
-		version = p2[1]
-	}
-	return ImageIdentifier{
-		Registry: registry,
-		Repo:     repo,
-	}, Version(version)
 }
 
 type appender func(m *ImageMap, r *Resource)
