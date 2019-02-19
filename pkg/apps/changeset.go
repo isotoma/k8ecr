@@ -36,12 +36,24 @@ type ChangeSet struct {
 }
 
 // NewChangeSet creates a new changeset
-func NewChangeSet(ID ImageIdentifier) *ChangeSet {
-	return &ChangeSet{
+func NewChangeSet(ID ImageIdentifier) ChangeSet {
+	return ChangeSet{
 		ImageID:     ID,
 		NeedsUpdate: false,
 		UpdateTo:    "",
 		Containers:  make(map[string][]Container),
+	}
+}
+
+// SetLatest sets the latest version, and checks if this changeset requires update
+func (cs *ChangeSet) SetLatest(version string) {
+	cs.UpdateTo = Version(version)
+	for _, v := range cs.Versions() {
+		// If a single item has a different version, then we need to update
+		if v != version {
+			cs.NeedsUpdate = true
+			return
+		}
 	}
 }
 
@@ -62,10 +74,10 @@ func (cs *ChangeSet) Upgrade(mgr *AppManager) error {
 
 // Versions returns all versions in use for the image
 func (cs *ChangeSet) Versions() []string {
-	versions := make(map[Version]bool)
-	for _, resources := range cs.Containers {
-		for _, item := range resources {
-			versions[item.Current] = true
+	versions := make(map[Version]bool) // using a map as a set
+	for _, containers := range cs.Containers {
+		for _, c := range containers {
+			versions[c.Current] = true
 		}
 	}
 	rv := make([]string, 0)

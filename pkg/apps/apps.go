@@ -11,8 +11,8 @@ type App struct {
 }
 
 // NewApp returns a new App
-func NewApp(name string) *App {
-	return &App{
+func NewApp(name string) App {
+	return App{
 		Name:       name,
 		ChangeSets: make(map[ImageIdentifier]ChangeSet),
 	}
@@ -25,6 +25,16 @@ func (app *App) GetChangeSets() []ChangeSet {
 		images = append(images, v)
 	}
 	return images
+}
+
+// SetLatest sets the latest version on every changeset in this app
+func (app *App) SetLatest(registry, repository, version string) {
+	id := ImageIdentifier{Registry: registry, Repo: repository}
+	cs, ok := app.ChangeSets[id]
+	if ok {
+		cs.SetLatest(version)
+	}
+
 }
 
 // AppManager finds and updates Applications
@@ -52,36 +62,12 @@ func NewAppManager(namespace string) (*AppManager, error) {
 	return a, err
 }
 
-// SetLatest sets the latest version on the image
-// and flags if it needs update
+// SetLatest calls SetLatest on all contained apps
+// Setting the version on all relevant containers
 func (mgr *AppManager) SetLatest(registry, repository, version string) {
-	id := ImageIdentifier{Registry: registry, Repo: repository}
 	for _, app := range mgr.Apps {
-		imap, ok := app.ChangeSets[id]
-		if ok {
-			imap.UpdateTo = Version(version)
-			imap.NeedsUpdate = false
-			versions := imap.Versions()
-			for _, v := range versions {
-				if v != version {
-					imap.NeedsUpdate = true
-				}
-			}
-			app.ChangeSets[id] = imap
-		}
+		app.SetLatest(registry, repository, version)
 	}
-}
-
-// GetImages in alphabetical order
-func (mgr *AppManager) GetImages() []ChangeSet {
-	// TODO SORTING
-	images := make([]ChangeSet, 0)
-	for _, a := range mgr.Apps {
-		for _, v := range a.ChangeSets {
-			images = append(images, v)
-		}
-	}
-	return images
 }
 
 func groupResources(resources map[string][]Container) map[string]App {
@@ -90,11 +76,11 @@ func groupResources(resources map[string][]Container) map[string]App {
 		for _, item := range resources {
 			app, ok := apps[item.App]
 			if !ok {
-				app = *NewApp(item.App)
+				app = NewApp(item.App)
 			}
 			image, ok := app.ChangeSets[item.ImageID]
 			if !ok {
-				image = *NewChangeSet(item.ImageID)
+				image = NewChangeSet(item.ImageID)
 			}
 			image.Containers[kind] = append(image.Containers[kind], item)
 			app.ChangeSets[item.ImageID] = image
@@ -104,6 +90,7 @@ func groupResources(resources map[string][]Container) map[string]App {
 	return apps
 }
 
+// Scan the cluster and find all resources and containers we manage
 func (mgr *AppManager) Scan() error {
 	resources := make(map[string][]Container)
 	for _, rm := range resourceManagers {
