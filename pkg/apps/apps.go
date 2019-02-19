@@ -1,8 +1,6 @@
 package apps
 
 import (
-	"fmt"
-
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -12,6 +10,7 @@ type App struct {
 	ChangeSets map[ImageIdentifier]ChangeSet
 }
 
+// NewApp returns a new App
 func NewApp(name string) *App {
 	return &App{
 		Name:       name,
@@ -19,7 +18,8 @@ func NewApp(name string) *App {
 	}
 }
 
-func (app *App) GetContainers() []ChangeSet {
+// GetChangeSets returns all changesets in the App
+func (app *App) GetChangeSets() []ChangeSet {
 	images := make([]ChangeSet, 0)
 	for _, v := range app.ChangeSets {
 		images = append(images, v)
@@ -50,21 +50,6 @@ func NewAppManager(namespace string) (*AppManager, error) {
 	}
 	err = a.Scan()
 	return a, err
-}
-
-// Upgrade all of the resources using this image
-func (mgr *AppManager) Upgrade(image *ChangeSet) error {
-	fmt.Printf("Updating image %s:\n", image.ImageID.Repo)
-	for kind, resources := range image.Containers {
-		for _, resource := range resources {
-			fmt.Printf("    %s %s/%s\n", kind, resource.ContainerID.Resource, resource.ContainerID.Container)
-			err := mgr.Managers[kind].Upgrade(mgr, image, resource)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 // SetLatest sets the latest version on the image

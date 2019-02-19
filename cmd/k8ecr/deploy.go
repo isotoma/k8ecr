@@ -39,11 +39,11 @@ func chooser(mgr *apps.AppManager) error {
 	}
 	table.AddRow(cols...)
 	for _, app := range mgr.Apps {
-		for _, image := range app.GetContainers() {
-			if image.NeedsUpdate {
-				row := []interface{}{app.Name, image.ImageID.Repo, image.UpdateTo, strings.Join(image.Versions(), ", ")}
+		for _, cs := range app.GetChangeSets() {
+			if cs.NeedsUpdate {
+				row := []interface{}{app.Name, cs.ImageID.Repo, cs.UpdateTo, strings.Join(cs.Versions(), ", ")}
 				for _, kind := range kinds {
-					row = append(row, len(image.Containers[kind]))
+					row = append(row, len(cs.Containers[kind]))
 				}
 				table.AddRow(row...)
 			}
@@ -55,9 +55,9 @@ func chooser(mgr *apps.AppManager) error {
 	fmt.Scanln(&input)
 	app, ok := mgr.Apps[input]
 	if ok {
-		for _, image := range app.GetContainers() {
-			if image.NeedsUpdate {
-				return mgr.Upgrade(&image)
+		for _, cs := range app.GetChangeSets() {
+			if cs.NeedsUpdate {
+				return cs.Upgrade(mgr)
 			}
 			fmt.Printf("Does not require update.\n")
 			return nil
