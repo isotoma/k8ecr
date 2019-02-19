@@ -10,7 +10,7 @@ import (
 
 var cronjobResource = &apps.ResourceManager{
 	Kind: "Cronjob",
-	Fetcher: func(mgr *apps.AppManager) ([]interface{}, error) {
+	Resources: func(mgr *apps.AppManager) ([]interface{}, error) {
 		client := mgr.ClientSet.BatchV1beta1().CronJobs(mgr.Namespace)
 		response, err := client.List(metav1.ListOptions{})
 		if err != nil {

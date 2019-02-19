@@ -70,41 +70,35 @@ func (mgr *AppManager) SetLatest(registry, repository, version string) {
 	}
 }
 
-func groupResources(resources map[string][]Container) map[string]App {
-	apps := make(map[string]App)
-	for kind, resources := range resources {
-		for _, item := range resources {
-			app, ok := apps[item.App]
-			if !ok {
-				app = NewApp(item.App)
-			}
-			image, ok := app.ChangeSets[item.ImageID]
-			if !ok {
-				image = NewChangeSet(item.ImageID)
-			}
-			image.Containers[kind] = append(image.Containers[kind], item)
-			app.ChangeSets[item.ImageID] = image
-			apps[app.Name] = app
-		}
+// AddContainer adds the specified container, from a resource of the specified kind
+// To the appropriate app
+func (mgr *AppManager) AddContainer(kind string, container Container) {
+	app, ok := mgr.Apps[container.App]
+	if !ok {
+		mgr.Apps[container.App] = NewApp(container.App)
 	}
-	return apps
+	cs, ok := mgr.Apps[container.App].ChangeSets[container.ImageID]
+	if !ok {
+		mgr.Apps[container.App].ChangeSets[container.ImageID] = NewChangeSet(container.ImageID)
+	}
+	changeset := mgr.Apps[container.App].ChangeSets[container.ImageID]
+	changeset.AddContainer(kind, container)
+	app.ChangeSets[container.ImageID] = cs
+	mgr.Apps[app.Name] = app
 }
 
 // Scan the cluster and find all resources and containers we manage
 func (mgr *AppManager) Scan() error {
-	resources := make(map[string][]Container)
 	for _, rm := range resourceManagers {
-		resources[rm.Kind] = make([]Container, 0)
-		items, err := rm.Fetcher(mgr)
+		items, err := rm.Resources(mgr)
 		if err != nil {
 			return err
 		}
 		for _, item := range items {
-			for _, r := range rm.Generator(item) {
-				resources[rm.Kind] = append(resources[rm.Kind], r)
+			for _, c := range rm.Generator(item) {
+				mgr.AddContainer(rm.Kind, c)
 			}
 		}
 	}
-	mgr.Apps = groupResources(resources)
 	return nil
 }

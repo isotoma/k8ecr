@@ -2,7 +2,7 @@ package apps
 
 type ResourceManager struct {
 	Kind      string
-	Fetcher   func(mgr *AppManager) ([]interface{}, error)
+	Resources func(mgr *AppManager) ([]interface{}, error)
 	Generator func(item interface{}) []Container
 	Upgrade   func(mgr *AppManager, image *ChangeSet, resource Container) error
 }

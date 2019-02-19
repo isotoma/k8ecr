@@ -10,7 +10,7 @@ import (
 
 var deploymentResource = &apps.ResourceManager{
 	Kind: "Deployment",
-	Fetcher: func(mgr *apps.AppManager) ([]interface{}, error) {
+	Resources: func(mgr *apps.AppManager) ([]interface{}, error) {
 		client := mgr.ClientSet.AppsV1beta1().Deployments(mgr.Namespace)
 		response, err := client.List(metav1.ListOptions{})
 		if err != nil {

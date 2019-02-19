@@ -7,3 +7,6 @@ build:
 
 vendor:
 	dep ensure	
+
+test:
+	go test -timeout 30s github.com/isotoma/k8ecr/pkg/...

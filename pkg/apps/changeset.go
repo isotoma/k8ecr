@@ -2,6 +2,8 @@ package apps
 
 import (
 	"fmt"
+
+	"github.com/Masterminds/semver"
 )
 
 // Version is a version number expressed as a string
@@ -46,15 +48,36 @@ func NewChangeSet(ID ImageIdentifier) ChangeSet {
 }
 
 // SetLatest sets the latest version, and checks if this changeset requires update
+// Uses SemVer to perform comparisons if possible, otherwise falls back to string
+// equality comparison.
 func (cs *ChangeSet) SetLatest(version string) {
 	cs.UpdateTo = Version(version)
-	for _, v := range cs.Versions() {
-		// If a single item has a different version, then we need to update
-		if v != version {
-			cs.NeedsUpdate = true
-			return
+	sv, err := semver.NewVersion(version)
+	if err != nil {
+		// new version is not semver, we just do a string comparison
+		for _, v := range cs.Versions() {
+			if v != version {
+				cs.NeedsUpdate = true
+				return
+			}
+		}
+	} else {
+		for _, v := range cs.Versions() {
+			oldv, err := semver.NewVersion(v)
+			if err != nil {
+				cs.NeedsUpdate = true
+				return
+			}
+			if oldv.Compare(sv) < 0 {
+				cs.NeedsUpdate = true
+				return
+			}
 		}
 	}
+}
+
+func (cs *ChangeSet) AddContainer(kind string, container Container) {
+	cs.Containers[kind] = append(cs.Containers[kind], container)
 }
 
 // Upgrade all of the resources in this changeset, using the managers in the appmanager
