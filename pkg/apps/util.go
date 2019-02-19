@@ -1,4 +1,4 @@
-package imagemanager
+package apps
 
 import (
 	"os"
