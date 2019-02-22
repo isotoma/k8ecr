@@ -37,10 +37,12 @@ func chooser(mgr *apps.AppManager) error {
 		kinds = append(kinds, kind)
 		cols = append(cols, fmt.Sprintf("%sS", strings.ToUpper(kind)))
 	}
+	options := 0
 	table.AddRow(cols...)
 	for _, app := range mgr.Apps {
 		for _, cs := range app.GetChangeSets() {
 			if cs.NeedsUpdate {
+				options++
 				row := []interface{}{app.Name, cs.ImageID.Repo, cs.UpdateTo, strings.Join(cs.Versions(), ", ")}
 				for _, kind := range kinds {
 					row = append(row, len(cs.Containers[kind]))
@@ -48,6 +50,10 @@ func chooser(mgr *apps.AppManager) error {
 				table.AddRow(row...)
 			}
 		}
+	}
+	if options == 0 {
+		fmt.Println("Nothing requires update.")
+		return nil
 	}
 	fmt.Println(table)
 	var input string

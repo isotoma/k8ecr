@@ -1,6 +1,9 @@
 package apps
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 var (
 	id1 = ImageIdentifier{Registry: "reg1", Repo: "repo1"}
@@ -68,5 +71,17 @@ func TestSetLatest(T *testing.T) {
 	cs4.SetLatest("0.5.0")
 	if !cs4.NeedsUpdate {
 		T.Errorf("Should always update from latest")
+	}
+}
+
+func TestVersions(T *testing.T) {
+	cs1 := NewChangeSet(id1)
+	cs1.AddContainer("Foo", container1)
+	cs1.AddContainer("Bar", container2)
+	cs1.AddContainer("Foo", container3)
+	cs1.AddContainer("Baz", container3)
+	versions := cs1.Versions()
+	if !reflect.DeepEqual(versions, []string{"0.1.0", "1.0.0", "latest"}) {
+		T.Errorf("Versions is wrong: %v", versions)
 	}
 }

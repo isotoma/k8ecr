@@ -7,24 +7,24 @@ import (
 // App is a group of images mapped to containers within resources in the app
 type App struct {
 	Name       string
-	ChangeSets map[ImageIdentifier]ChangeSet
+	ChangeSets map[ImageIdentifier]*ChangeSet
 }
 
 // NewApp returns a new App
-func NewApp(name string) App {
-	return App{
+func NewApp(name string) *App {
+	return &App{
 		Name:       name,
-		ChangeSets: make(map[ImageIdentifier]ChangeSet),
+		ChangeSets: make(map[ImageIdentifier]*ChangeSet),
 	}
 }
 
 // GetChangeSets returns all changesets in the App
-func (app *App) GetChangeSets() []ChangeSet {
-	images := make([]ChangeSet, 0)
+func (app *App) GetChangeSets() []*ChangeSet {
+	cs := make([]*ChangeSet, 0)
 	for _, v := range app.ChangeSets {
-		images = append(images, v)
+		cs = append(cs, v)
 	}
-	return images
+	return cs
 }
 
 // SetLatest sets the latest version on every changeset in this app
@@ -42,7 +42,7 @@ func (app *App) SetLatest(registry, repository, version string) {
 type AppManager struct {
 	ClientSet kubernetes.Interface
 	Namespace string
-	Apps      map[string]App
+	Apps      map[string]*App
 	Managers  map[string]*ResourceManager
 }
 
@@ -55,7 +55,7 @@ func NewAppManager(namespace string) (*AppManager, error) {
 	a := &AppManager{
 		ClientSet: clientset,
 		Namespace: namespace,
-		Apps:      make(map[string]App),
+		Apps:      make(map[string]*App),
 		Managers:  resourceManagers,
 	}
 	err = a.Scan()
@@ -73,18 +73,16 @@ func (mgr *AppManager) SetLatest(registry, repository, version string) {
 // AddContainer adds the specified container, from a resource of the specified kind
 // To the appropriate app
 func (mgr *AppManager) AddContainer(kind string, container Container) {
-	app, ok := mgr.Apps[container.App]
+	_, ok := mgr.Apps[container.App]
 	if !ok {
 		mgr.Apps[container.App] = NewApp(container.App)
 	}
-	cs, ok := mgr.Apps[container.App].ChangeSets[container.ImageID]
+	_, ok = mgr.Apps[container.App].ChangeSets[container.ImageID]
 	if !ok {
 		mgr.Apps[container.App].ChangeSets[container.ImageID] = NewChangeSet(container.ImageID)
 	}
 	changeset := mgr.Apps[container.App].ChangeSets[container.ImageID]
 	changeset.AddContainer(kind, container)
-	app.ChangeSets[container.ImageID] = cs
-	mgr.Apps[app.Name] = app
 }
 
 // Scan the cluster and find all resources and containers we manage

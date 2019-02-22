@@ -2,6 +2,7 @@ package apps
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/Masterminds/semver"
 )
@@ -34,12 +35,12 @@ type ChangeSet struct {
 	ImageID     ImageIdentifier
 	NeedsUpdate bool
 	UpdateTo    Version
-	Containers  map[string][]Container
+	Containers  map[string][]Container // Map of Kinds to lists of containers
 }
 
 // NewChangeSet creates a new changeset
-func NewChangeSet(ID ImageIdentifier) ChangeSet {
-	return ChangeSet{
+func NewChangeSet(ID ImageIdentifier) *ChangeSet {
+	return &ChangeSet{
 		ImageID:     ID,
 		NeedsUpdate: false,
 		UpdateTo:    "",
@@ -77,6 +78,10 @@ func (cs *ChangeSet) SetLatest(version string) {
 }
 
 func (cs *ChangeSet) AddContainer(kind string, container Container) {
+	_, ok := cs.Containers[kind]
+	if !ok {
+		cs.Containers[kind] = make([]Container, 0)
+	}
 	cs.Containers[kind] = append(cs.Containers[kind], container)
 }
 
@@ -107,6 +112,7 @@ func (cs *ChangeSet) Versions() []string {
 	for v := range versions {
 		rv = append(rv, string(v))
 	}
+	sort.Strings(rv)
 	return rv
 }
 

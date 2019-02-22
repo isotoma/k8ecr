@@ -17,13 +17,12 @@ func getClusterConfig(kubeconfig string) (*rest.Config, error) {
 			return nil, err
 		}
 		return config, nil
-	} else {
-		config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-		if err != nil {
-			return nil, err
-		}
-		return config, nil
 	}
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
 }
 
 func homeDir() string {
