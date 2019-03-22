@@ -65,9 +65,9 @@ func chooser(mgr *apps.AppManager) error {
 			if cs.NeedsUpdate {
 				return cs.Upgrade(mgr)
 			}
-			fmt.Printf("Does not require update.\n")
-			return nil
 		}
+		fmt.Printf("Does not require update.\n")
+		return nil
 	}
 	fmt.Printf("App not known\n")
 	return nil
